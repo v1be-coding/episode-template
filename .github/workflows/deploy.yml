@@ -1,0 +1,107 @@
+# The user commits this, because v1be-bot can't write workflows.
+# Slice 1: main deploys production. A PR only proves its token can sign in.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {} # nothing unless a job asks
+
+env:
+  ROLE: v1be-${{ vars.EPISODE }}-ci
+  TERRAFORM_VERSION: 1.17.1
+  TERRAFORM_SHA256: 4638628058e71a55212b1c563712eac03b902128f40740f3dc8174df12135061
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  # Proves AWS accepts GitHub's pull_request token. The branch environments in
+  # slice 4 depend on this.
+  sign-in:
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+    steps:
+      - name: Sign in with the pull_request token
+        env:
+          ACCOUNT_ID: ${{ secrets.PORTFOLIO_ACCOUNT_ID }}
+        run: |
+          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          echo "::add-mask::$token"
+          aws sts assume-role-with-web-identity --region ap-southeast-1 \
+            --role-arn "arn:aws:iam::$ACCOUNT_ID:role/$ROLE" \
+            --role-session-name pr-check --web-identity-token "$token" \
+            --query 'AssumedRoleUser.AssumedRoleId' --output text >/dev/null
+          echo "PASS: AWS accepted the pull_request token"
+
+  production:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Build and test
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+          (cd dist/api && zip -q ../api.zip index.js)
+      - name: Install Terraform at a fixed version
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          echo "$TERRAFORM_SHA256  terraform.zip" | sha256sum -c -
+          unzip -q terraform.zip terraform
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: Sign in to AWS
+        env:
+          ACCOUNT_ID: ${{ secrets.PORTFOLIO_ACCOUNT_ID }}
+        run: |
+          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          echo "::add-mask::$token"
+          printf %s "$token" > "$RUNNER_TEMP/oidc-token"
+          {
+            echo "AWS_ROLE_ARN=arn:aws:iam::$ACCOUNT_ID:role/$ROLE"
+            echo "AWS_WEB_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/oidc-token"
+            echo "AWS_REGION=ap-southeast-1"
+          } >> "$GITHUB_ENV"
+      - name: Deploy
+        id: deploy
+        working-directory: infra
+        env:
+          TF_VAR_account_id: ${{ secrets.PORTFOLIO_ACCOUNT_ID }}
+          TF_VAR_episode: ${{ vars.EPISODE }}
+          TF_VAR_environment: production
+          TF_VAR_api_zip: ../dist/api.zip
+        run: |
+          terraform init -lockfile=readonly \
+            -backend-config="bucket=v1be-${{ vars.ACCOUNT }}-state" \
+            -backend-config="key=${{ vars.EPISODE }}/production/terraform.tfstate"
+          terraform apply -no-color -auto-approve -lock-timeout=2m
+          echo "api_url=$(terraform output -raw api_url)" >> "$GITHUB_OUTPUT"
+      - name: Check the API answers
+        env:
+          API_URL: ${{ steps.deploy.outputs.api_url }}
+        run: |
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 3 "$API_URL/api/health" | tee response.json
+          jq -e '.status == "ok"' response.json
