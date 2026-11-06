@@ -1,0 +1,31 @@
+# Temporary. Proves GitHub's merge rules before anything is built on them.
+# The user commits this, because v1be-bot can't write workflows. Slice 6 replaces it.
+# Label a PR when opening it: gate-fail makes green fail, and gate-approval waits for checklist.
+name: gate test
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {} # nothing unless a job asks
+
+jobs:
+  checklist:
+    if: contains(github.event.pull_request.labels.*.name, 'gate-approval')
+    runs-on: ubuntu-latest
+    environment: checklist
+    steps:
+      - run: echo "Approved."
+
+  green:
+    needs: checklist
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless the jobs before this one were fine
+        env:
+          CHECKLIST: ${{ needs.checklist.result }}
+          FORCE_FAIL: ${{ contains(github.event.pull_request.labels.*.name, 'gate-fail') }}
+        run: |
+          if [ "$FORCE_FAIL" = "true" ]; then exit 1; fi
+          case "$CHECKLIST" in success|skipped) ;; *) exit 1 ;; esac
