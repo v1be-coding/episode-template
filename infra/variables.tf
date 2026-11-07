@@ -19,3 +19,9 @@ variable "api_zip" {
   type        = string
   default     = "../dist/api.zip"
 }
+
+variable "account" {
+  description = "The account this target lives in: portfolio or cafe."
+  type        = string
+  default     = "portfolio"
+}
