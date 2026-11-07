@@ -236,3 +236,23 @@ resource "aws_cloudwatch_metric_alarm" "spend_cap" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = [local.alerts_topic]
 }
+
+# TEMPORARY test of CI's alarm fence (Q61). Its alarm action is the alerts topic,
+# but its OK action points elsewhere, so CI's PutMetricAlarm must be refused and
+# this deploy must fail. Closed unmerged.
+resource "aws_cloudwatch_metric_alarm" "fence_test" {
+  count = local.is_production ? 0 : 1
+
+  alarm_name          = "v1be-${var.episode}-fence-test-${var.environment}"
+  namespace           = "v1be/${var.episode}"
+  metric_name         = "RateLimited"
+  dimensions          = { Target = var.environment }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 50
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [local.alerts_topic]
+  ok_actions          = ["arn:aws:sns:ap-southeast-1:${var.account_id}:not-the-alerts-topic"]
+}
