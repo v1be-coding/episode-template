@@ -1,6 +1,7 @@
 # The user commits this, because the agent's App can't write workflows.
-# Slice 4: main deploys production. A ready PR from this repo gets a branch
-# environment, and closing the PR destroys it. Slice 6 adds the required chain.
+# Slice 5: main deploys production. A ready PR from this repo gets a cost
+# estimate, waits for approval if it adds over $1 a month, then gets a branch
+# environment. Closing the PR destroys it. Slice 6 adds the required chain.
 name: deploy
 
 on:
@@ -26,10 +27,105 @@ jobs:
       account: ${{ vars.ACCOUNT }}
     secrets: inherit
 
-  # Branch environments live in portfolio, whatever the episode's account (ADR-0011).
-  # Draft pushes don't deploy, and PRs from other repos are refused (Q5).
-  branch:
+  # ADR-0007's estimate (Q58). It reads the Terraform files only, with no plan and
+  # no AWS login, and only its Infracost steps get the key (Q4).
+  cost:
     if: >-
+      github.event_name == 'pull_request' && github.event.action != 'closed' &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      needs_approval: ${{ steps.decide.outputs.needs_approval }}
+    env:
+      INFRACOST_VERSION: 0.10.47
+      INFRACOST_SHA256: df098d5565b78cc23de57e1dac9f2a02491691322cbd690dca9b197e3e02fe93
+      INFRACOST_NO_COLOR: "true"
+      INFRACOST_SKIP_UPDATE_CHECK: "true"
+      # Placeholders, so no real ID reaches the parser or the public log.
+      VARS: >-
+        --terraform-var account_id=000000000000
+        --terraform-var episode=${{ vars.EPISODE }}
+        --terraform-var account=${{ vars.ACCOUNT }}
+        --terraform-var environment=production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: pr
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: base
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Install Infracost at a fixed version
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo infracost.tar.gz "https://github.com/infracost/infracost/releases/download/v${INFRACOST_VERSION}/infracost-linux-amd64.tar.gz"
+          echo "$INFRACOST_SHA256  infracost.tar.gz" | sha256sum -c -
+          tar -xzf infracost.tar.gz infracost-linux-amd64
+          mv infracost-linux-amd64 infracost
+          echo "$PWD" >> "$GITHUB_PATH"
+      # Retries a temporary failure (Q6). If the estimate still can't be made, the
+      # PR waits for approval instead of failing a round.
+      - name: Estimate the monthly change
+        id: estimate
+        continue-on-error: true
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          for attempt in 1 2 3; do
+            # shellcheck disable=SC2086
+            if infracost breakdown --path base/infra $VARS --format json --out-file base.json \
+              && infracost diff --path pr/infra $VARS --compare-to base.json --format json --out-file diff.json; then
+              exit 0
+            fi
+            sleep $((attempt * 15))
+          done
+          exit 1
+      - name: Decide whether it needs approval
+        id: decide
+        env:
+          ESTIMATED: ${{ steps.estimate.outcome }}
+        run: |
+          if [ "$ESTIMATED" != success ]; then
+            echo "needs_approval=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Infracost couldn't estimate this PR, so it waits for approval."
+            echo "Infracost couldn't estimate this PR, so it waits for approval." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          change=$(jq -r '.diffTotalMonthlyCost // "0"' diff.json)
+          infracost output --path diff.json --format github-comment --show-skipped >> "$GITHUB_STEP_SUMMARY"
+          if awk -v c="$change" 'BEGIN { exit !(c > 1) }'; then
+            echo "needs_approval=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Adds \$${change} a month, over the \$1 limit, so it waits for approval."
+          else
+            echo "needs_approval=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Adds \$${change} a month, within the \$1 limit."
+          fi
+
+  # Only this job names the environment. On the deploy job it would change the
+  # token's sub, which the CI role refuses (Q58).
+  cost-approval:
+    needs: cost
+    if: needs.cost.outputs.needs_approval == 'true'
+    runs-on: ubuntu-24.04
+    environment: cost
+    permissions: {}
+    steps:
+      - run: echo "Approved, so the branch environment can deploy."
+
+  # Branch environments live in portfolio, whatever the episode's account (ADR-0011).
+  # Draft pushes don't deploy, and PRs from other repos are refused (Q5). It runs
+  # when the approval job is skipped, and never after a rejected or failed one.
+  branch:
+    needs: [cost, cost-approval]
+    if: >-
+      always() && needs.cost.result == 'success' &&
+      (needs.cost-approval.result == 'success' || needs.cost-approval.result == 'skipped') &&
       github.event_name == 'pull_request' && github.event.action != 'closed' &&
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository
