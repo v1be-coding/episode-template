@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { accessStatements, loginStatement, seed } from "./setup.js";
+import { accessStatements, describeError, loginStatement, seed } from "./setup.js";
 
 const arn = "arn:aws:iam::000000000000:role/v1be-sample-api-production";
 
@@ -17,9 +17,8 @@ describe("loginStatement", () => {
 });
 
 describe("accessStatements", () => {
-  it("gives the app read and write access to tables, and nothing on the schema", () => {
+  it("gives the app read and write access to tables, and no schema rights", () => {
     expect(accessStatements).toEqual([
-      "GRANT USAGE ON SCHEMA public TO api",
       "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO api",
     ]);
   });
@@ -32,5 +31,17 @@ describe("seed", () => {
     await seed({ transactionWithRetry } as unknown as Parameters<typeof seed>[0], []);
 
     expect(transactionWithRetry).not.toHaveBeenCalled();
+  });
+});
+
+describe("describeError", () => {
+  it("includes the database's own reason, which Drizzle wraps", () => {
+    const error = new Error("Failed query", { cause: new Error("permission denied") });
+
+    expect(describeError(error)).toBe("Failed query: permission denied");
+  });
+
+  it("copes with an error that has no cause", () => {
+    expect(describeError(new Error("no endpoint"))).toBe("no endpoint");
   });
 });

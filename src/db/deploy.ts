@@ -1,6 +1,6 @@
 // CI's database steps, run as admin after Terraform: node dist/db/deploy.cjs <step>
 import { connect } from "./client.js";
-import { grantAccess, runMigrations, seed } from "./setup.js";
+import { describeError, grantAccess, runMigrations, seed } from "./setup.js";
 
 const steps: Record<string, (db: ReturnType<typeof connect>) => Promise<void>> = {
   migrate: runMigrations,
@@ -21,6 +21,6 @@ async function main() {
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
+  console.error(describeError(error));
   process.exitCode = 1;
 });
