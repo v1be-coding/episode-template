@@ -6,24 +6,31 @@
     "node": "24.x"
   },
   "scripts": {
-    "build": "npm run build:api && npm run build:web",
-    "build:api": "esbuild src/api/handler.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/api/index.js",
+    "build": "npm run build:api && npm run build:db && npm run build:web",
+    "build:api": "esbuild src/api/handler.ts --bundle --platform=node --target=node24 --format=cjs --external:pg-native --outfile=dist/api/index.js",
+    "build:db": "esbuild src/db/deploy.ts --bundle --platform=node --target=node24 --format=cjs --external:pg-native --outfile=dist/db/deploy.cjs",
     "build:web": "vite build",
+    "db:generate": "aurora-dsql-drizzle generate --out ./drizzle -- --config drizzle.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/aws-lambda": "8.10.164",
     "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.2.1",
+    "drizzle-kit": "0.31.11",
     "esbuild": "0.28.2",
     "typescript": "7.0.2",
     "vite": "8.3.6",
     "vitest": "5.1.0"
   },
   "dependencies": {
+    "@aws/aurora-dsql-drizzle": "0.2.0",
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   }

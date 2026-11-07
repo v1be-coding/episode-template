@@ -20,7 +20,7 @@ provider "aws" {
   region              = "ap-southeast-1"
   allowed_account_ids = [var.account_id]
 
-  # The episode tag is how CI's role can touch its own APIs (ADR-0011).
+  # The episode tag is how CI's role can touch its own APIs and clusters (ADR-0011).
   default_tags {
     tags = {
       project    = "v1be"

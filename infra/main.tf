@@ -1,6 +1,7 @@
 locals {
-  name   = "v1be-${var.episode}-api-${var.environment}"
-  api_id = one(data.aws_apigatewayv2_apis.api.ids)
+  name             = "v1be-${var.episode}-api-${var.environment}"
+  api_id           = one(data.aws_apigatewayv2_apis.api.ids)
+  cluster_endpoint = "${aws_dsql_cluster.db.identifier}.dsql.ap-southeast-1.on.aws"
 }
 
 # v1be-infra owns production's API shell, so the distribution can point at it
@@ -11,6 +12,17 @@ data "aws_apigatewayv2_apis" "api" {
 
 data "aws_apigatewayv2_api" "api" {
   api_id = local.api_id
+}
+
+# Only production is protected, so branch environments can be torn down. CI has
+# no dsql:UpdateCluster, which is the only way to turn this off (Q45).
+resource "aws_dsql_cluster" "db" {
+  deletion_protection_enabled = var.environment == "production"
+
+  tags = merge(
+    { Name = local.name },
+    var.account == "cafe" && var.environment == "production" ? { backup = "weekly" } : {},
+  )
 }
 
 data "aws_iam_policy_document" "assume" {
@@ -33,6 +45,11 @@ data "aws_iam_policy_document" "api" {
   statement {
     actions   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
     resources = ["arn:aws:ssm:ap-southeast-1:${var.account_id}:parameter/${var.episode}/*"]
+  }
+
+  statement {
+    actions   = ["dsql:DbConnect"]
+    resources = [aws_dsql_cluster.db.arn]
   }
 }
 
@@ -65,9 +82,15 @@ resource "aws_lambda_function" "api" {
   timeout          = 10
   memory_size      = 256
 
+  environment {
+    variables = {
+      CLUSTER_ENDPOINT = local.cluster_endpoint
+      DB_USER          = "api"
+    }
+  }
+
   depends_on = [aws_cloudwatch_log_group.api]
 }
-
 
 resource "aws_apigatewayv2_integration" "api" {
   api_id                 = local.api_id
