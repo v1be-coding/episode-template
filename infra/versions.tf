@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "6.69.1"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "3.9.1"
+    }
   }
 
   # CI passes the bucket and key, because they depend on the episode.

@@ -1,14 +1,16 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { api, limitMessage, RateLimitedError } from "./api.js";
 
 function App() {
   const [status, setStatus] = useState("checking");
 
   useEffect(() => {
-    fetch("/api/health")
-      .then((response) => response.json())
-      .then((body: { status: string }) => setStatus(body.status))
-      .catch(() => setStatus("unavailable"));
+    api<{ status: string }>("/api/health")
+      .then((body) => setStatus(body.status))
+      .catch((error: unknown) =>
+        setStatus(error instanceof RateLimitedError ? limitMessage(error) : "unavailable"),
+      );
   }, []);
 
   return (

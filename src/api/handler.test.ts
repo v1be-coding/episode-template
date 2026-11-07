@@ -1,9 +1,11 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getNote, putNote } from "../db/notes.js";
+import { guardRequest } from "../limits/guard.js";
 import { handler } from "./handler.js";
 
 vi.mock("../db/notes.js", () => ({ getNote: vi.fn(), putNote: vi.fn() }));
+vi.mock("../limits/guard.js", () => ({ guardRequest: vi.fn() }));
 
 const id = "6f1c2f6e-3f0a-4a53-9d7e-0a4f9c1b2d3e";
 
@@ -19,6 +21,15 @@ describe("handler", () => {
     const response = await handler(request("GET", "/api/health"));
 
     expect(response).toMatchObject({ statusCode: 200, body: '{"status":"ok"}' });
+  });
+
+  it("sends the guard's response instead of running a route", async () => {
+    vi.mocked(guardRequest).mockResolvedValue({ statusCode: 429, body: "{}" });
+
+    const response = await handler(request("PUT", `/api/notes/${id}`, '{"text":"hi"}'));
+
+    expect(response).toMatchObject({ statusCode: 429 });
+    expect(putNote).not.toHaveBeenCalled();
   });
 
   it("returns 404 for anything else", async () => {
