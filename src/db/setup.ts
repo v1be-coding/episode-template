@@ -16,9 +16,14 @@ export function loginStatement(roleArn: string): string {
 }
 
 export const accessStatements = [
-  "GRANT USAGE ON SCHEMA public TO api",
   "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO api",
 ];
+
+// Drizzle reports only the query, and the reason sits on the cause.
+export function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  return error.cause instanceof Error ? `${error.message}: ${error.cause.message}` : error.message;
+}
 
 const run = (db: Admin, statement: string) =>
   withRetry(() => db.execute(sql.raw(statement)));
