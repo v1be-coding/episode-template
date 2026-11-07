@@ -10,6 +10,24 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     return json(200, { status: "ok" });
   }
 
+  // Temporary probe for slice 5 (Q55): shows which headers carry the caller's IP.
+  // This PR closes unmerged.
+  if (event.rawPath === "/api/probe") {
+    const names = [
+      "x-forwarded-for",
+      "cloudfront-viewer-address",
+      "cf-connecting-ip",
+      "forwarded",
+      "x-real-ip",
+      "via",
+    ];
+    return json(200, {
+      sourceIp: event.requestContext.http.sourceIp,
+      domainName: event.requestContext.domainName,
+      headers: Object.fromEntries(names.map((name) => [name, event.headers?.[name] ?? null])),
+    });
+  }
+
   const id = NOTE_PATH.exec(event.rawPath)?.[1];
   if (id) {
     return notesRoute(event, id);
