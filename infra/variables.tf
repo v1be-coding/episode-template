@@ -27,7 +27,10 @@ variable "account" {
 }
 
 variable "origin_access_control_id" {
-  description = "The account's origin access control. Only a branch environment needs it."
+  description = "The account's origin access control. A branch deploy passes the real ID."
   type        = string
-  default     = ""
+
+  # Not empty, because the provider refuses that even on a destroy, and teardown
+  # has no need to look up the real one.
+  default = "unset"
 }
