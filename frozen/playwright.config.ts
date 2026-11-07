@@ -12,8 +12,9 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: process.env.BASE_URL,
-    // Shows what happened on a first failure, so a retried test can be judged.
-    trace: "on-first-retry",
+    // Keeps the failed first attempt, which is the one worth reading. on-first-retry
+    // would keep only the retry, which for a flaky test is the attempt that passed.
+    trace: "retain-on-failure-and-retries",
   },
   projects: [
     { name: "smoke", testIgnore: /rate-limit\.spec\.ts/ },
