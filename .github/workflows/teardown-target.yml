@@ -1,0 +1,94 @@
+# The user commits this, because the agent's App can't write workflows.
+# Destroys one branch environment, then deletes its state, so any pr-* state left
+# in the bucket marks an environment that still needs removing (Q54).
+name: teardown target
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: A branch environment's name, such as pr-12
+        type: string
+        required: true
+
+permissions: {} # the caller grants these
+
+env:
+  ROLE: v1be-${{ vars.EPISODE }}-ci
+  STATE_BUCKET: v1be-portfolio-state
+  STATE_KEY: ${{ vars.EPISODE }}/${{ inputs.environment }}/terraform.tfstate
+  TERRAFORM_VERSION: 1.17.1
+  TERRAFORM_SHA256: 4638628058e71a55212b1c563712eac03b902128f40740f3dc8174df12135061
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  teardown:
+    # Only a production name could reach production's state, so refuse anything else.
+    if: startsWith(inputs.environment, 'pr-')
+    runs-on: ubuntu-24.04
+    # Disabling and deleting a distribution takes minutes.
+    timeout-minutes: 45
+    env:
+      TF_VAR_account_id: ${{ secrets.PORTFOLIO_ACCOUNT_ID }}
+      TF_VAR_episode: ${{ vars.EPISODE }}
+      TF_VAR_account: portfolio
+      TF_VAR_environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # main's infra/, because a closed PR's merge ref can be stale or conflicted.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Install Terraform at a fixed version
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          echo "$TERRAFORM_SHA256  terraform.zip" | sha256sum -c -
+          unzip -q terraform.zip terraform
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: Sign in to AWS
+        env:
+          ACCOUNT_ID: ${{ secrets.PORTFOLIO_ACCOUNT_ID }}
+        run: |
+          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          echo "::add-mask::$token"
+          printf %s "$token" > "$RUNNER_TEMP/oidc-token"
+          {
+            echo "AWS_ROLE_ARN=arn:aws:iam::$ACCOUNT_ID:role/$ROLE"
+            echo "AWS_WEB_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/oidc-token"
+            echo "AWS_REGION=ap-southeast-1"
+          } >> "$GITHUB_ENV"
+      # A PR that was never ready has no environment.
+      - name: Check for an environment
+        id: state
+        run: |
+          if aws s3api head-object --bucket "$STATE_BUCKET" --key "$STATE_KEY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No environment to remove."
+          fi
+      - name: Destroy the environment
+        if: steps.state.outputs.exists == 'true'
+        working-directory: infra
+        # Destroy never reads the bundle, but the config hashes the file.
+        run: |
+          : > "$RUNNER_TEMP/empty.zip"
+          export TF_VAR_api_zip="$RUNNER_TEMP/empty.zip"
+          terraform init -lockfile=readonly \
+            -backend-config="bucket=$STATE_BUCKET" \
+            -backend-config="key=$STATE_KEY"
+          terraform destroy -no-color -auto-approve -lock-timeout=2m
+      - name: Sign in again
+        if: steps.state.outputs.exists == 'true'
+        run: |
+          # Deleting a distribution outlasts GitHub's short-lived token.
+          curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value > "$RUNNER_TEMP/oidc-token"
+      - name: Delete the state
+        if: steps.state.outputs.exists == 'true'
+        run: aws s3 rm "s3://$STATE_BUCKET/$STATE_KEY"

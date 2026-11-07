@@ -1,23 +1,47 @@
 locals {
+  is_production    = var.environment == "production"
   name             = "v1be-${var.episode}-api-${var.environment}"
-  api_id           = one(data.aws_apigatewayv2_apis.api.ids)
+  api_id           = local.is_production ? one(data.aws_apigatewayv2_apis.production[0].ids) : aws_apigatewayv2_api.branch[0].id
+  api_arn          = local.is_production ? data.aws_apigatewayv2_api.production[0].execution_arn : aws_apigatewayv2_api.branch[0].execution_arn
   cluster_endpoint = "${aws_dsql_cluster.db.identifier}.dsql.ap-southeast-1.on.aws"
 }
 
 # v1be-infra owns production's API shell, so the distribution can point at it
 # before the first deploy (ADR-0010). This adds its routes and stage.
-data "aws_apigatewayv2_apis" "api" {
+data "aws_apigatewayv2_apis" "production" {
+  count = local.is_production ? 1 : 0
+
   name = "v1be-${var.episode}-api"
 }
 
-data "aws_apigatewayv2_api" "api" {
+data "aws_apigatewayv2_api" "production" {
+  count = local.is_production ? 1 : 0
+
   api_id = local.api_id
+}
+
+# A branch environment owns everything it uses, so closing its PR removes it all.
+resource "aws_apigatewayv2_api" "branch" {
+  count = local.is_production ? 0 : 1
+
+  name          = local.name
+  protocol_type = "HTTP"
+}
+
+module "branch_edge" {
+  count  = local.is_production ? 0 : 1
+  source = "./branch-edge"
+
+  bucket                   = "v1be-${var.episode}-site-${var.environment}"
+  comment                  = "${var.episode}, ${var.environment}"
+  api_endpoint             = aws_apigatewayv2_api.branch[0].api_endpoint
+  origin_access_control_id = var.origin_access_control_id
 }
 
 # Only production is protected, so branch environments can be torn down. CI has
 # no dsql:UpdateCluster, which is the only way to turn this off (Q45).
 resource "aws_dsql_cluster" "db" {
-  deletion_protection_enabled = var.environment == "production"
+  deletion_protection_enabled = local.is_production
 
   tags = merge(
     { Name = local.name },
@@ -116,5 +140,5 @@ resource "aws_lambda_permission" "api" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.api.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${data.aws_apigatewayv2_api.api.execution_arn}/*/*"
+  source_arn    = "${local.api_arn}/*/*"
 }

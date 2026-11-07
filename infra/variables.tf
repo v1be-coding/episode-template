@@ -9,7 +9,7 @@ variable "episode" {
 }
 
 variable "environment" {
-  description = "production, or a branch environment's name."
+  description = "production, or a branch environment's name, such as pr-12."
   type        = string
   default     = "production"
 }
@@ -24,4 +24,10 @@ variable "account" {
   description = "The account this target lives in: portfolio or cafe."
   type        = string
   default     = "portfolio"
+}
+
+variable "origin_access_control_id" {
+  description = "The account's origin access control. Only a branch environment needs it."
+  type        = string
+  default     = ""
 }
