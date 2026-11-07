@@ -4,6 +4,26 @@ locals {
   api_id           = local.is_production ? one(data.aws_apigatewayv2_apis.production[0].ids) : aws_apigatewayv2_api.branch[0].id
   api_arn          = local.is_production ? data.aws_apigatewayv2_api.production[0].execution_arn : aws_apigatewayv2_api.branch[0].execution_arn
   cluster_endpoint = "${aws_dsql_cluster.db.identifier}.dsql.ap-southeast-1.on.aws"
+
+  # v1be-infra makes production's secret and the alarm topic (Q55, Q61).
+  api_origin_secret = local.is_production ? data.aws_ssm_parameter.api_origin[0].value : random_password.api_origin[0].result
+  alerts_topic      = "arn:aws:sns:ap-southeast-1:${var.account_id}:v1be-alerts"
+}
+
+# CloudFront sends this to the API, and the Lambda refuses requests without it,
+# which closes the raw execute-api address (Q55). Kept sensitive, so the plan in
+# the public logs hides it.
+data "aws_ssm_parameter" "api_origin" {
+  count = local.is_production ? 1 : 0
+
+  name = "/${var.episode}/internal/api-origin"
+}
+
+resource "random_password" "api_origin" {
+  count = local.is_production ? 0 : 1
+
+  length  = 48
+  special = false
 }
 
 # v1be-infra owns production's API shell, so the distribution can point at it
@@ -35,6 +55,7 @@ module "branch_edge" {
   bucket                   = "v1be-${var.episode}-site-${var.environment}"
   comment                  = "${var.episode}, ${var.environment}"
   api_endpoint             = aws_apigatewayv2_api.branch[0].api_endpoint
+  api_origin_secret        = local.api_origin_secret
   origin_access_control_id = var.origin_access_control_id
 }
 
@@ -47,6 +68,23 @@ resource "aws_dsql_cluster" "db" {
     { Name = local.name },
     var.account == "cafe" && var.environment == "production" ? { backup = "weekly" } : {},
   )
+}
+
+# The per-IP and spend-cap counters (Q56). Rows expire by themselves.
+resource "aws_dynamodb_table" "limits" {
+  name         = "v1be-${var.episode}-limits-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires"
+    enabled        = true
+  }
 }
 
 data "aws_iam_policy_document" "assume" {
@@ -74,6 +112,11 @@ data "aws_iam_policy_document" "api" {
   statement {
     actions   = ["dsql:DbConnect"]
     resources = [aws_dsql_cluster.db.arn]
+  }
+
+  statement {
+    actions   = ["dynamodb:UpdateItem"]
+    resources = [aws_dynamodb_table.limits.arn]
   }
 }
 
@@ -108,8 +151,14 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      CLUSTER_ENDPOINT = local.cluster_endpoint
-      DB_USER          = "api"
+      CLUSTER_ENDPOINT  = local.cluster_endpoint
+      DB_USER           = "api"
+      LIMITS_TABLE      = aws_dynamodb_table.limits.name
+      API_ORIGIN_SECRET = local.api_origin_secret
+      IP_SOURCE         = local.is_production ? "cloudflare" : "api-gateway"
+      EPISODE           = var.episode
+      TARGET            = var.environment
+      DAILY_CAP_USD     = var.daily_cap_usd
     }
   }
 
@@ -133,6 +182,12 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = local.api_id
   name        = "$default"
   auto_deploy = true
+
+  # A ceiling on all traffic together, which no caller can get around (Q55).
+  default_route_settings {
+    throttling_rate_limit  = 10
+    throttling_burst_limit = 20
+  }
 }
 
 resource "aws_lambda_permission" "api" {
@@ -141,4 +196,40 @@ resource "aws_lambda_permission" "api" {
   function_name = aws_lambda_function.api.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${local.api_arn}/*/*"
+}
+
+# Production only, as branch tests trip the limit on purpose (Q61). The Lambda
+# writes both metrics. Alarms email only when they start firing.
+resource "aws_cloudwatch_metric_alarm" "rate_limited" {
+  count = local.is_production ? 1 : 0
+
+  alarm_name          = "v1be-${var.episode}-rate-limited"
+  alarm_description   = "Someone keeps going over the per-IP limit."
+  namespace           = "v1be/${var.episode}"
+  metric_name         = "RateLimited"
+  dimensions          = { Target = var.environment }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 50
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [local.alerts_topic]
+}
+
+resource "aws_cloudwatch_metric_alarm" "spend_cap" {
+  count = local.is_production ? 1 : 0
+
+  alarm_name          = "v1be-${var.episode}-spend-cap"
+  alarm_description   = "The AI feature reached its daily cap and paused until midnight UTC."
+  namespace           = "v1be/${var.episode}"
+  metric_name         = "SpendCapReached"
+  dimensions          = { Target = var.environment }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [local.alerts_topic]
 }

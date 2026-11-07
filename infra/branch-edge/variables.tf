@@ -13,6 +13,12 @@ variable "api_endpoint" {
   type        = string
 }
 
+variable "api_origin_secret" {
+  description = "Sent to the API on every request, so the Lambda can refuse its raw address (Q55)."
+  type        = string
+  sensitive   = true
+}
+
 variable "origin_access_control_id" {
   description = "The account's origin access control, which v1be-infra owns."
   type        = string

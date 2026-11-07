@@ -34,3 +34,9 @@ variable "origin_access_control_id" {
   # has no need to look up the real one.
   default = "unset"
 }
+
+variable "daily_cap_usd" {
+  description = "The most the AI feature may spend per UTC day on this target (Q60)."
+  type        = string
+  default     = "1"
+}

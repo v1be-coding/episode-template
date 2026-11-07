@@ -69,6 +69,12 @@ resource "aws_cloudfront_distribution" "site" {
     origin_id   = "api"
     domain_name = replace(var.api_endpoint, "https://", "")
 
+    # CloudFront replaces any value a caller sends with this one.
+    custom_header {
+      name  = "x-v1be-api-origin"
+      value = var.api_origin_secret
+    }
+
     custom_origin_config {
       http_port              = 80
       https_port             = 443
