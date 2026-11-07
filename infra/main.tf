@@ -236,3 +236,13 @@ resource "aws_cloudwatch_metric_alarm" "spend_cap" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = [local.alerts_topic]
 }
+
+# TEMPORARY test of the $1 cost gate (Q58). Two keys cost about $2 a month, so
+# the PR must wait for approval. Reject it, then close the PR unmerged. CI has
+# no KMS rights, so these could never be created anyway.
+resource "aws_kms_key" "cost_gate_test" {
+  count = 2
+
+  description             = "Cost gate test, never applied"
+  deletion_window_in_days = 7
+}
