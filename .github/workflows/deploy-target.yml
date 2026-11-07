@@ -1,0 +1,155 @@
+# The user commits this, because the agent's App can't write workflows.
+# Deploys one target. Keep this in .github/workflows/, as the App can write
+# .github/actions/, and a run mustn't be able to edit these steps (Q54).
+name: deploy target
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: production, or a branch environment's name
+        type: string
+        required: true
+      account:
+        description: The account whose state bucket this target uses
+        type: string
+        required: true
+
+permissions: {} # the caller grants these
+
+env:
+  ROLE: v1be-${{ vars.EPISODE }}-ci
+  TARGET: ${{ inputs.environment }}
+  TERRAFORM_VERSION: 1.17.1
+  TERRAFORM_SHA256: 4638628058e71a55212b1c563712eac03b902128f40740f3dc8174df12135061
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    # A new distribution takes minutes, and production's path never makes one.
+    timeout-minutes: 40
+    env:
+      TF_VAR_account_id: ${{ secrets.PORTFOLIO_ACCOUNT_ID }}
+      TF_VAR_episode: ${{ vars.EPISODE }}
+      TF_VAR_account: ${{ inputs.account }}
+      TF_VAR_environment: ${{ inputs.environment }}
+      TF_VAR_api_zip: ../dist/api.zip
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Build and test
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+          (cd dist/api && zip -q ../api.zip index.js)
+      # Here, not in a script, because a run can't edit this file (Q47). A revert
+      # can't undo a migration (ADR-0013).
+      - name: Check that migrations only add things
+        run: |
+          pattern='(?<!on\s)\b(drop|truncate|rename|delete|update)\b|\balter\s+column\b.*\btype\b'
+          if grep -inP "$pattern" drizzle/*.sql; then
+            echo "::error::Migrations only add things. Reword a comment if it caused this."
+            exit 1
+          fi
+      - name: Install Terraform at a fixed version
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          echo "$TERRAFORM_SHA256  terraform.zip" | sha256sum -c -
+          unzip -q terraform.zip terraform
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: Sign in to AWS
+        env:
+          ACCOUNT_ID: ${{ secrets.PORTFOLIO_ACCOUNT_ID }}
+        run: |
+          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          echo "::add-mask::$token"
+          printf %s "$token" > "$RUNNER_TEMP/oidc-token"
+          {
+            echo "AWS_ROLE_ARN=arn:aws:iam::$ACCOUNT_ID:role/$ROLE"
+            echo "AWS_WEB_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/oidc-token"
+            echo "AWS_REGION=ap-southeast-1"
+          } >> "$GITHUB_ENV"
+      # v1be-infra owns this and its ID lives in state CI can't read, so find it by
+      # name. Production's distribution already has it.
+      - name: Find the origin access control
+        if: inputs.environment != 'production'
+        run: |
+          id=$(aws cloudfront list-origin-access-controls --output text \
+            --query "OriginAccessControlList.Items[?Name=='v1be-s3'].Id | [0]")
+          echo "TF_VAR_origin_access_control_id=$id" >> "$GITHUB_ENV"
+      # Apart from the rest, because the provider fails on a Lambda whose settings
+      # wait on a new cluster's ID. It also puts migrations before the new code.
+      - name: Create the database
+        working-directory: infra
+        run: |
+          terraform init -lockfile=readonly \
+            -backend-config="bucket=v1be-${{ inputs.account }}-state" \
+            -backend-config="key=${{ vars.EPISODE }}/$TARGET/terraform.tfstate"
+          terraform apply -no-color -auto-approve -lock-timeout=2m -target=aws_dsql_cluster.db
+          id=$(terraform show -json | jq -er '.values.root_module.resources[] | select(.address == "aws_dsql_cluster.db") | .values.identifier')
+          echo "CLUSTER_ENDPOINT=$id.dsql.ap-southeast-1.on.aws" >> "$GITHUB_ENV"
+      - name: Sign in again
+        run: |
+          # A new cluster can outlast GitHub's short-lived token.
+          curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value > "$RUNNER_TEMP/oidc-token"
+      - name: Migrate the database
+        run: node dist/db/deploy.cjs migrate
+      - name: Deploy the API and any branch edge
+        working-directory: infra
+        run: |
+          terraform apply -no-color -auto-approve -lock-timeout=2m
+          {
+            echo "SITE_BUCKET=$(terraform output -raw site_bucket)"
+            if [ "$TARGET" != production ]; then
+              echo "BRANCH_URL=$(terraform output -raw branch_url)"
+              echo "DISTRIBUTION_ID=$(terraform output -raw branch_distribution_id)"
+            fi
+          } >> "$GITHUB_ENV"
+      - name: Sign in again after the distribution
+        run: |
+          # A new distribution outlasts the token too, and each step after this reads it.
+          curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value > "$RUNNER_TEMP/oidc-token"
+      - name: Give the Lambda its database access
+        env:
+          API_ROLE_ARN: arn:aws:iam::${{ secrets.PORTFOLIO_ACCOUNT_ID }}:role/v1be-${{ vars.EPISODE }}-api-${{ inputs.environment }}
+        run: node dist/db/deploy.cjs grant
+      # Portfolio targets only. A café production job must never have this step (Q44).
+      - name: Load seed data
+        run: node dist/db/deploy.cjs seed
+      - name: Publish the site
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          aws s3 sync dist/web "s3://$SITE_BUCKET" --delete --no-progress
+          if [ "$TARGET" = production ]; then
+            host="${SITE_URL#https://}"
+            DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[0]=='$host'].Id | [0]" --output text)
+            echo "BASE_URL=$SITE_URL" >> "$GITHUB_ENV"
+          else
+            echo "BASE_URL=$BRANCH_URL" >> "$GITHUB_ENV"
+            echo "Branch environment: $BRANCH_URL" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/*' >/dev/null
+      # Slice 6 takes frozen/ from the PR's base commit.
+      - name: Run the frozen smoke test
+        working-directory: frozen
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test

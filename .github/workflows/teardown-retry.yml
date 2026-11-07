@@ -1,0 +1,83 @@
+# The user commits this, because the agent's App can't write workflows.
+# Each week, removes any branch environment whose PR is closed, and opens an issue
+# if one still won't go. Runs on main, which AWS trusts (ADR-0011).
+name: teardown retry
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions: {} # nothing unless a job asks
+
+jobs:
+  find:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+      pull-requests: read
+    outputs:
+      environments: ${{ steps.find.outputs.environments }}
+    steps:
+      - name: Find environments whose PR is closed
+        id: find
+        env:
+          ACCOUNT_ID: ${{ secrets.PORTFOLIO_ACCOUNT_ID }}
+          EPISODE: ${{ vars.EPISODE }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          AWS_REGION: ap-southeast-1
+        run: |
+          curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value > "$RUNNER_TEMP/oidc-token"
+          export AWS_ROLE_ARN="arn:aws:iam::$ACCOUNT_ID:role/v1be-$EPISODE-ci"
+          export AWS_WEB_IDENTITY_TOKEN_FILE="$RUNNER_TEMP/oidc-token"
+
+          found=()
+          while read -r name; do
+            state=$(gh pr view "${name#pr-}" --json state --jq .state)
+            if [ "$state" != OPEN ]; then found+=("$name"); fi
+          done < <(aws s3api list-objects-v2 --bucket v1be-portfolio-state --prefix "$EPISODE/pr-" \
+            --query 'Contents[].Key' --output json | jq -r '.[]?' | grep -E '/terraform\.tfstate$' | cut -d/ -f2)
+
+          list=$(printf '%s\n' "${found[@]}" | jq -Rnc '[inputs | select(length > 0)]')
+          echo "Closed PRs with an environment: $list"
+          echo "environments=$list" >> "$GITHUB_OUTPUT"
+
+  teardown:
+    needs: find
+    if: needs.find.outputs.environments != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(needs.find.outputs.environments) }}
+    concurrency:
+      group: ${{ matrix.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/teardown-target.yml
+    with:
+      environment: ${{ matrix.environment }}
+    secrets: inherit
+
+  report:
+    needs: teardown
+    if: always() && needs.teardown.result == 'failure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open an issue, unless one is already open
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="A branch environment failed to tear down"
+          if [ -z "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')" ]; then
+            gh issue create --title "$title" --body "The weekly retry failed, so AWS resources may still be running. See $RUN_URL."
+          fi
