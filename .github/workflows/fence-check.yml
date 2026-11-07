@@ -1,0 +1,72 @@
+# Temporary. Proves Q51 with a real pull_request token: CI can read production's
+# distribution and can't change it. Remove it once it passes.
+#
+# Every attempt is safe if the fence fails: the update sends the current config
+# back, the delete can't succeed on an enabled distribution, and the untag names a
+# key that doesn't exist. The tag attempt would add a tag, which the next
+# deploy-episodes run removes.
+name: fence check
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+jobs:
+  fence:
+    if: "!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+    env:
+      ACCOUNT_ID: ${{ secrets.PORTFOLIO_ACCOUNT_ID }}
+      EPISODE: ${{ vars.EPISODE }}
+      SITE_URL: ${{ vars.SITE_URL }}
+      AWS_REGION: ap-southeast-1
+    steps:
+      - name: Try to change production's distribution
+        run: |
+          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          echo "::add-mask::$token"
+          printf %s "$token" > "$RUNNER_TEMP/oidc-token"
+          export AWS_ROLE_ARN="arn:aws:iam::$ACCOUNT_ID:role/v1be-$EPISODE-ci"
+          export AWS_WEB_IDENTITY_TOKEN_FILE="$RUNNER_TEMP/oidc-token"
+
+          host="${SITE_URL#https://}"
+          id=$(aws cloudfront list-distributions --output text \
+            --query "DistributionList.Items[?Aliases.Items[0]=='$host'].Id | [0]")
+          arn="arn:aws:cloudfront::$ACCOUNT_ID:distribution/$id"
+
+          # The control: reading must work, or a refusal below proves nothing.
+          aws cloudfront get-distribution-config --id "$id" > "$RUNNER_TEMP/config.json"
+          etag=$(jq -r .ETag "$RUNNER_TEMP/config.json")
+          jq .DistributionConfig "$RUNNER_TEMP/config.json" > "$RUNNER_TEMP/same.json"
+          echo "PASS: CI can read the distribution"
+
+          failed=0
+          # Prints only the error code, because AWS's message holds the account ID.
+          expect_denied() {
+            name="$1"; shift
+            if out=$("$@" 2>&1); then
+              echo "FAIL: $name succeeded"
+              failed=1
+            elif grep -q 'AccessDenied' <<<"$out"; then
+              echo "PASS: $name refused"
+            else
+              echo "FAIL: $name: $(grep -o 'An error occurred ([A-Za-z]*)' <<<"$out" | head -1)"
+              failed=1
+            fi
+          }
+
+          expect_denied "update" aws cloudfront update-distribution --id "$id" --if-match "$etag" \
+            --distribution-config "file://$RUNNER_TEMP/same.json"
+          expect_denied "tag" aws cloudfront tag-resource --resource "$arn" \
+            --tags "Items=[{Key=episode,Value=$EPISODE}]"
+          expect_denied "untag" aws cloudfront untag-resource --resource "$arn" \
+            --tag-keys "Items=fence-check-no-such-key"
+          expect_denied "delete" aws cloudfront delete-distribution --id "$id" --if-match "$etag"
+
+          exit "$failed"
