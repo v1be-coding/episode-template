@@ -1,0 +1,56 @@
+{
+  "suites": [
+    {
+      "title": "smoke/smoke.spec.ts",
+      "specs": [
+        {
+          "title": "the page loads in a real browser",
+          "file": "smoke/smoke.spec.ts",
+          "tests": [
+            {
+              "projectName": "smoke",
+              "status": "expected"
+            }
+          ]
+        },
+        {
+          "title": "the API answers through the page",
+          "file": "smoke/smoke.spec.ts",
+          "tests": [
+            {
+              "projectName": "smoke",
+              "status": "expected"
+            }
+          ]
+        },
+        {
+          "title": "a write and a read reach the database",
+          "file": "smoke/smoke.spec.ts",
+          "tests": [
+            {
+              "projectName": "smoke",
+              "status": "expected"
+            }
+          ]
+        }
+      ],
+      "suites": []
+    },
+    {
+      "title": "smoke/rate-limit.spec.ts",
+      "specs": [
+        {
+          "title": "going over the per-IP limit gives a handled 429",
+          "file": "smoke/rate-limit.spec.ts",
+          "tests": [
+            {
+              "projectName": "rate-limit",
+              "status": "expected"
+            }
+          ]
+        }
+      ],
+      "suites": []
+    }
+  ]
+}
