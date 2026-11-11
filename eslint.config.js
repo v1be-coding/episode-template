@@ -15,14 +15,14 @@ export default defineConfig(
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
     },
   },
-  { files: ["**/*.js"], extends: [tseslint.configs.disableTypeChecked] },
+  { files: ["**/*.{js,mjs,cjs}"], extends: [tseslint.configs.disableTypeChecked] },
   {
     files: ["src/web/**/*.{ts,tsx}"],
     extends: [reactHooks.configs.flat.recommended],
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ["src/{api,db,limits}/**/*.ts", "*.config.{ts,js}"],
+    files: ["src/{api,db,limits}/**/*.ts", "*.config.{ts,js}", ".claude/hooks/**/*.mjs"],
     languageOptions: { globals: globals.node },
   },
   // Vitest's asymmetric matchers, such as expect.any(), are typed any.
