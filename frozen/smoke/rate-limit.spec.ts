@@ -15,8 +15,10 @@ test("going over the per-IP limit gives a handled 429", async ({ unpacedRequest,
   const retryAfter = Number(response?.headers()["retry-after"]);
   expect(retryAfter).toBeGreaterThan(0);
 
+  // Every line that calls the API shows the message under a flood, so a page
+  // with more than one call shows it more than once (#42, attempt 1).
   await page.goto("/");
-  await expect(page.getByText(/Too many requests\. Try again in \d+ seconds\./)).toBeVisible();
+  await expect(page.getByText(/Too many requests\. Try again in \d+ seconds\./).first()).toBeVisible();
 
   // Wait out the window, so whatever runs next from this IP starts clean.
   await page.waitForTimeout((retryAfter + 1) * 1000);
