@@ -1,0 +1,6 @@
+dist/
+frozen/
+infra/
+drizzle/
+package-lock.json
+.claude/skills/

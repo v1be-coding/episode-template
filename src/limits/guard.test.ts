@@ -50,7 +50,9 @@ describe("guardRequest", () => {
       statusCode: 429,
       headers: { "retry-after": expect.stringMatching(/^\d+$/) },
     });
-    expect(JSON.parse((response as { body: string }).body)).toMatchObject({ error: "rate_limited" });
+    expect(JSON.parse((response as { body: string }).body)).toMatchObject({
+      error: "rate_limited",
+    });
     expect(recordMetric).toHaveBeenCalledWith("RateLimited", { client: expect.any(String) });
   });
 

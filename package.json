@@ -11,10 +11,18 @@
     "build:db": "esbuild src/db/deploy.ts --bundle --platform=node --target=node24 --format=cjs --external:pg-native --outfile=dist/db/deploy.cjs",
     "build:web": "vite build",
     "db:generate": "aurora-dsql-drizzle generate --out ./drizzle -- --config drizzle.config.ts",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "test": "vitest run && node --test '.claude/**/*.test.mjs'",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky",
+    "secrets": "secretlint \"**/*\""
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@secretlint/secretlint-rule-pattern": "13.1.0",
+    "@secretlint/secretlint-rule-preset-recommend": "13.1.0",
     "@types/aws-lambda": "8.10.164",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",
@@ -23,7 +31,16 @@
     "@vitejs/plugin-react": "6.2.1",
     "drizzle-kit": "0.31.11",
     "esbuild": "0.28.2",
-    "typescript": "7.0.2",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0",
+    "prettier": "3.9.10",
+    "secretlint": "13.1.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
     "vite": "8.3.6",
     "vitest": "5.1.0"
   },
@@ -34,5 +51,13 @@
     "pg": "8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1"
+  },
+  "lint-staged": {
+    "*": "secretlint --no-glob",
+    "*.{ts,tsx,js}": [
+      "eslint --fix --max-warnings=0",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css,html}": "prettier --write"
   }
 }

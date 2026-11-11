@@ -6,7 +6,10 @@ export type LimitMetric = "RateLimited" | "SpendCapReached";
 // extra rights. Written straight to stdout, because console.log adds a prefix
 // that stops CloudWatch reading it. Extra fields stay plain fields, never
 // dimensions, as each dimension value is billed as its own metric (Q61).
-export function recordMetric(name: LimitMetric, fields: Record<string, string | number> = {}): void {
+export function recordMetric(
+  name: LimitMetric,
+  fields: Record<string, string | number> = {},
+): void {
   const { episode, target } = limitsConfig();
   const line = {
     _aws: {
