@@ -3,9 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "lint": "node helpers/lint.ts",
+    "test:helpers": "node --test 'helpers/test/*.test.ts'",
+    "typecheck": "tsc"
   },
   "devDependencies": {
-    "@playwright/test": "1.65.0"
+    "@playwright/test": "1.65.0",
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3"
   }
 }
