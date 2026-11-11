@@ -2,6 +2,15 @@
 
 Tests written during the Spec phase, before a run starts. CI takes this folder from the PR's base commit, so a run's edits here have no effect, and changing it needs code owner review. See [ADR-0013](https://github.com/v1be-coding/series/blob/main/docs/adr/0013-runs-land-through-auto-merge-and-frozen-tests.md).
 
+## Where each test runs
+
+| Folder | Branch environment | Production |
+| --- | --- | --- |
+| `smoke/` | Yes | Yes |
+| `acceptance/` | Yes | No (Q29) |
+
+`verify.yml` sets `FROZEN_TARGET`, and `helpers/projects.ts` picks the projects. A local run counts as a branch.
+
 ## The frozen lint
 
 CI rejects any test file here that uses one of these. A test must be one straight line of steps and assertions, because agent-written tests have been seen returning early or skipping and still passing.

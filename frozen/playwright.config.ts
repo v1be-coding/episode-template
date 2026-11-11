@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { projectsFor } from "./helpers/projects.ts";
 
 export default defineConfig({
   testDir: ".",
@@ -22,10 +23,5 @@ export default defineConfig({
     // would keep only the retry, which for a flaky test is the attempt that passed.
     trace: "retain-on-failure-and-retries",
   },
-  projects: [
-    // helpers/test/ holds the helpers' own unit tests, which run with node --test.
-    { name: "smoke", testIgnore: [/rate-limit\.spec\.ts/, "helpers/**", "node_modules/**"] },
-    // Last, because it uses up this IP's minute on purpose.
-    { name: "rate-limit", testMatch: /rate-limit\.spec\.ts/, dependencies: ["smoke"] },
-  ],
+  projects: projectsFor(process.env.FROZEN_TARGET),
 });
