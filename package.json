@@ -11,7 +11,7 @@
     "build:db": "esbuild src/db/deploy.ts --bundle --platform=node --target=node24 --format=cjs --external:pg-native --outfile=dist/db/deploy.cjs",
     "build:web": "vite build",
     "db:generate": "aurora-dsql-drizzle generate --out ./drizzle -- --config drizzle.config.ts",
-    "test": "vitest run",
+    "test": "vitest run && node --test '.claude/**/*.test.mjs'",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
