@@ -24,7 +24,7 @@ npm run test:helpers    # the helpers' own unit tests
 
 ## Retries and the retry report
 
-Each test gets one retry (Q40). A test that needed it counts as a pass, and the PR comment lists it.
+Each test gets one retry (Q40). Temporary edit for a slice 6 test. A test that needed it counts as a pass, and the PR comment lists it.
 
 - `helpers/evidence.ts` records what the network and page did during each attempt: requests with no response, 4xx and 5xx responses with a few allowlisted headers, the slowest request, and page errors. It keeps the app's own origin only, paths without query strings, and never bodies or cookies.
 - `helpers/retry-reporter.ts` writes `reports/retry-report.md` and `reports/retry-report.json`. Each retried or failed test gets a hint: `infra-looking`, `app-looking` or `unclear`. The hints are unvalidated and never block anything, so the report always shows the evidence behind them.
