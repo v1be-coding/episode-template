@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { connect } from "./client.js";
 import { notes } from "./schema.js";
 
@@ -25,4 +25,10 @@ export async function putNote(id: string, text: string): Promise<void> {
 export async function getNote(id: string): Promise<Note | undefined> {
   const [note] = await database().select().from(notes).where(eq(notes.id, id));
   return note;
+}
+
+// Every row, the seed note included. count() comes back as a number, not a string.
+export async function countNotes(): Promise<number> {
+  const [row] = await database().select({ count: count() }).from(notes);
+  return row?.count ?? 0;
 }

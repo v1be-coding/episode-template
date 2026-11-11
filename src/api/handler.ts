@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
-import { getNote, putNote } from "../db/notes.js";
+import { countNotes, getNote, putNote } from "../db/notes.js";
 import { guardRequest } from "../limits/guard.js";
 
 const NOTE_PATH = /^\/api\/notes\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -13,12 +13,30 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     return json(200, { status: "ok" });
   }
 
+  // "count" isn't a UUID, so this can't shadow GET /api/notes/<id>.
+  if (event.rawPath === "/api/notes/count") {
+    return countRoute(event);
+  }
+
   const id = NOTE_PATH.exec(event.rawPath)?.[1];
   if (id) {
     return notesRoute(event, id);
   }
 
   return json(404, { error: "Not found" });
+}
+
+async function countRoute(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  if (event.requestContext.http.method !== "GET") {
+    return json(405, { error: "Method not allowed" });
+  }
+
+  try {
+    return json(200, { count: await countNotes() });
+  } catch (error) {
+    console.error("Couldn't count notes", error);
+    return json(500, { error: "Internal error" });
+  }
 }
 
 async function notesRoute(
