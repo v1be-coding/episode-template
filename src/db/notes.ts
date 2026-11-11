@@ -22,6 +22,10 @@ export async function putNote(id: string, text: string): Promise<void> {
   );
 }
 
+export async function countNotes(): Promise<number> {
+  return database().$count(notes);
+}
+
 export async function getNote(id: string): Promise<Note | undefined> {
   const [note] = await database().select().from(notes).where(eq(notes.id, id));
   return note;
