@@ -1,6 +1,10 @@
 # The user commits this, because the agent's App can't write workflows.
 # Deploys one target. Keep this in .github/workflows/, as the App can write
 # .github/actions/, and a run mustn't be able to edit these steps (Q54).
+# Slice 6: type checks and unit tests run in the chain's checks job. The frozen
+# tests run in verify.yml, called from here so the caller's concurrency group
+# covers the deploy and its tests together, and a later push can't redeploy
+# mid-test (Q62).
 name: deploy target
 
 on:
@@ -12,6 +16,10 @@ on:
         required: true
       account:
         description: The account whose state bucket this target uses
+        type: string
+        required: true
+      frozen_ref:
+        description: The commit to take frozen/ from, the PR's base or main
         type: string
         required: true
 
@@ -39,6 +47,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    outputs:
+      base_url: ${{ steps.publish.outputs.base_url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,11 +57,9 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - name: Build and test
+      - name: Build
         run: |
           npm ci
-          npm run typecheck
-          npm test
           npm run build
           (cd dist/api && zip -q ../api.zip index.js)
       # Here, not in a script, because a run can't edit this file (Q47). A revert
@@ -133,6 +141,7 @@ jobs:
       - name: Load seed data
         run: node dist/db/deploy.cjs seed
       - name: Publish the site
+        id: publish
         env:
           SITE_URL: ${{ vars.SITE_URL }}
         run: |
@@ -140,16 +149,21 @@ jobs:
           if [ "$TARGET" = production ]; then
             host="${SITE_URL#https://}"
             DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[0]=='$host'].Id | [0]" --output text)
-            echo "BASE_URL=$SITE_URL" >> "$GITHUB_ENV"
+            echo "base_url=$SITE_URL" >> "$GITHUB_OUTPUT"
           else
-            echo "BASE_URL=$BRANCH_URL" >> "$GITHUB_ENV"
+            echo "base_url=$BRANCH_URL" >> "$GITHUB_OUTPUT"
             echo "Branch environment: $BRANCH_URL" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/*' >/dev/null
-      # Slice 6 takes frozen/ from the PR's base commit.
-      - name: Run the frozen smoke test
-        working-directory: frozen
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-          npx playwright test
+
+  # Its own job, so the frozen tests get no AWS token.
+  verify:
+    needs: deploy
+    permissions:
+      contents: read
+      pull-requests: write # verify.yml uses it only on a branch environment
+    uses: ./.github/workflows/verify.yml
+    with:
+      base_url: ${{ needs.deploy.outputs.base_url }}
+      frozen_ref: ${{ inputs.frozen_ref }}
+      branch_environment: ${{ inputs.environment != 'production' }}
