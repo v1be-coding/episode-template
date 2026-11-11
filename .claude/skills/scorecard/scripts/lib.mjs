@@ -113,3 +113,13 @@ export function grid(runs) {
     `- **Tests retried or failed in more than one run:** ${byTest.length ? byTest.join(", ") : "none"}.`,
   ].join("\n");
 }
+
+/**
+ * Attempts so far. A merged PR that was later reverted carries `failed-attempt`
+ * too, so it counts as failed, not landed. Nothing landed means no "plus one".
+ */
+export function attemptTally(prs) {
+  const failed = prs.filter((p) => p.labels.includes("failed-attempt"));
+  const landed = prs.find((p) => p.merged && !p.labels.includes("failed-attempt")) ?? null;
+  return { failed: failed.length, landed, attempts: failed.length + (landed ? 1 : 0) };
+}

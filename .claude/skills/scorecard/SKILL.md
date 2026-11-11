@@ -18,9 +18,9 @@ It reads GitHub only and prints Markdown. What it measures:
 | Measure                           | From                                                                                                                                                                   |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Time to green                     | The `Attempt <n> started at` comment `/attempt` posts on the spec, to `green` passing on the landed PR, minus time `checklist` and `cost-approval` waited for the user |
-| Attempts                          | PRs from `attempt-<spec>-<n>` branches labelled `failed-attempt`, plus one                                                                                             |
+| Attempts | PRs from `attempt-<spec>-<n>` branches labelled `failed-attempt`, plus one if an attempt landed. A merged attempt that was later reverted carries the label, so it counts as failed |
 | Frozen tests passing on attempt 1 | The first CI run of attempt 1. A test that passed on retry counts (Q40)                                                                                                |
-| Grid                              | Every run's `frozen-reports` artifact, kept 90 days. Run the scorecard within that time                                                                                |
+| Grid | Every attempt run's `frozen-reports` artifact, kept 90 days, and production's run after the merge. Fix PRs after a production failure aren't shown. Run the scorecard within those 90 days |
 
 If a number comes out as unknown, say why rather than filling it in. For example, a missing start comment means `/attempt` skipped its first step, which is a finding for `/retro`.
 
