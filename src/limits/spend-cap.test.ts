@@ -47,12 +47,16 @@ describe("withSpendCap", () => {
   });
 
   it("reserves the worst case, then settles to the real cost", async () => {
-    const result = await withSpendCap(0.01, async () => ({ value: "reply", costUsd: 0.004 }), {
-      db,
-      table: "t",
-      capUsd: 1,
-      now,
-    });
+    const result = await withSpendCap(
+      0.01,
+      () => Promise.resolve({ value: "reply", costUsd: 0.004 }),
+      {
+        db,
+        table: "t",
+        capUsd: 1,
+        now,
+      },
+    );
 
     expect(result).toEqual({ ok: true, value: "reply" });
     expect(added(send)).toEqual(["10000", "-6000"]);

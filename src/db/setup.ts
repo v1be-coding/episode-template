@@ -25,8 +25,7 @@ export function describeError(error: unknown): string {
   return error.cause instanceof Error ? `${error.message}: ${error.cause.message}` : error.message;
 }
 
-const run = (db: Admin, statement: string) =>
-  withRetry(() => db.execute(sql.raw(statement)));
+const run = (db: Admin, statement: string) => withRetry(() => db.execute(sql.raw(statement)));
 
 const exists = async (db: Admin, query: SQL) => {
   const { rows } = await withRetry(() => db.execute(query));

@@ -1,0 +1,6 @@
+# Fast checks before a commit. Hooks are allowed here because episode repos live
+# in the container's volume, which Windows can't reach (Q11). CI runs the same
+# checks, so skipping this hook only moves the failure to a round.
+npx lint-staged
+npm run typecheck
+npm test

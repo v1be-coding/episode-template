@@ -1,6 +1,12 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { describe, expect, it } from "vitest";
-import { addressGroup, cameThroughCloudFront, clientIp, hashIp, ORIGIN_HEADER } from "./client-ip.js";
+import {
+  addressGroup,
+  cameThroughCloudFront,
+  clientIp,
+  hashIp,
+  ORIGIN_HEADER,
+} from "./client-ip.js";
 
 const event = (headers: Record<string, string>, sourceIp = "198.51.100.7") =>
   ({ headers, requestContext: { http: { sourceIp } } }) as unknown as APIGatewayProxyEventV2;
@@ -25,11 +31,15 @@ describe("cameThroughCloudFront", () => {
 
 describe("clientIp", () => {
   it("uses CF-Connecting-IP behind Cloudflare", () => {
-    expect(clientIp(event({ "cf-connecting-ip": "203.0.113.5" }), "cloudflare")).toBe("203.0.113.5");
+    expect(clientIp(event({ "cf-connecting-ip": "203.0.113.5" }), "cloudflare")).toBe(
+      "203.0.113.5",
+    );
   });
 
   it("ignores CF-Connecting-IP on a branch, where anyone can send it", () => {
-    expect(clientIp(event({ "cf-connecting-ip": "203.0.113.5" }), "api-gateway")).toBe("198.51.100.7");
+    expect(clientIp(event({ "cf-connecting-ip": "203.0.113.5" }), "api-gateway")).toBe(
+      "198.51.100.7",
+    );
   });
 
   it("falls back to sourceIp if Cloudflare's header is missing", () => {
