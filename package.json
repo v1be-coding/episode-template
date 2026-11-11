@@ -54,7 +54,7 @@
   },
   "lint-staged": {
     "*": "secretlint --no-glob",
-    "*.{ts,tsx,js}": [
+    "*.{ts,tsx,js,mjs,cjs}": [
       "eslint --fix --max-warnings=0",
       "prettier --write"
     ],
