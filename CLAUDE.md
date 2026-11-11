@@ -4,7 +4,7 @@ A V1be Coding episode: one app, built from a spec in one run. The series' rules 
 
 ## Where things are
 
-- **Commands:** `/acceptance` writes the frozen tests from a spec, and `/attempt` builds and lands one. Both are in `.claude/commands/`.
+- **Commands:** `/acceptance` writes the frozen tests from a spec, and `/attempt` builds and lands one. Both are in `.claude/commands/`. After an episode, `/scorecard` reads its results from GitHub, then `/retro`.
 - **`frozen/`:** the tests a run is judged by. A run never edits them. See `frozen/README.md`.
 - **`.github/workflows/`:** the required chain is in `deploy.yml`. Only the user commits workflows.
 - **Database rules:** `README.md`.
