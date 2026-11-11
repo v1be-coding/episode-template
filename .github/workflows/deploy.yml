@@ -1,7 +1,10 @@
 # The user commits this, because the agent's App can't write workflows.
-# Slice 5: main deploys production. A ready PR from this repo gets a cost
-# estimate, waits for approval if it adds over $1 a month, then gets a branch
-# environment. Closing the PR destroys it. Slice 6 adds the required chain.
+# main deploys production and runs main's frozen tests. A ready PR from this repo
+# runs the required chain (Q13, Q62):
+#   rounds → checks and cost → cost-approval if over $1 → branch (deploy,
+#   then verify) → checklist → green
+# A PR that changes only frozen/ runs rounds, checks and green. Closing a PR
+# destroys its environment.
 name: deploy
 
 on:
@@ -21,19 +24,139 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      pull-requests: write # verify.yml asks for it, and uses it only on a PR
     uses: ./.github/workflows/deploy-target.yml
     with:
       environment: production
       account: ${{ vars.ACCOUNT }}
+      frozen_ref: ${{ github.sha }} # main's frozen tests, with no traces or comment
     secrets: inherit
 
-  # ADR-0007's estimate (Q58). It reads the Terraform files only, with no plan and
-  # no AWS login, and only its Infracost steps get the key (Q4).
-  cost:
+  # Counts this branch's earlier failed rounds and stops at 5 (Q22, Q63). Draft
+  # pushes and PRs from other repos stop here, and green fails for them (Q5).
+  rounds:
     if: >-
       github.event_name == 'pull_request' && github.event.action != 'closed' &&
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: read
+    outputs:
+      frozen_only: ${{ steps.files.outputs.frozen_only }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BRANCH: ${{ github.head_ref }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      # Renames count from both ends, so moving a file into frozen/ isn't frozen-only.
+      - name: Check whether the PR changes only frozen/
+        id: files
+        run: |
+          files=$(gh api --paginate "repos/$GH_REPO/pulls/$PR/files?per_page=100" \
+            --jq '.[] | .filename, (.previous_filename // empty)')
+          if [ -n "$files" ] && ! grep -qv '^frozen/' <<<"$files"; then
+            echo "frozen_only=true" >> "$GITHUB_OUTPUT"
+            echo "Changes only frozen/, so it skips the deploy (Q19)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "frozen_only=false" >> "$GITHUB_OUTPUT"
+          fi
+      # A round is a failed run where real work failed. Runs where only checklist,
+      # cost-approval or green failed don't count, as a rejection already ends the
+      # attempt. This run hasn't finished, so it isn't counted.
+      - name: Count failed rounds
+        run: |
+          runs=$(gh api --paginate \
+            "repos/$GH_REPO/actions/workflows/deploy.yml/runs?branch=$BRANCH&event=pull_request&status=failure&per_page=100" \
+            --jq '.workflow_runs[].id')
+          rounds=0
+          for run in $runs; do
+            if gh api --paginate "repos/$GH_REPO/actions/runs/$run/jobs?per_page=100" \
+                --jq '.jobs[] | select(.conclusion == "failure") | .name' \
+                | grep -qE '^(rounds|checks|cost|branch / .+)$'; then
+              rounds=$((rounds + 1))
+            fi
+          done
+          echo "Failed rounds before this run: $rounds of 5." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$rounds" -ge 5 ]; then
+            echo "::error::This branch has used its 5 rounds, so the attempt has failed (Q22)."
+            exit 1
+          fi
+
+  # Fast checks before anything costs money. Workflow syntax (Q65), type checks
+  # and unit tests, and the frozen lint from the base commit (Q64).
+  checks:
+    needs: rounds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      FROZEN_ONLY: ${{ needs.rounds.outputs.frozen_only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: pr
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: base
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: frozen
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: pr/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            pr/package-lock.json
+            pr/frozen/package-lock.json
+            base/frozen/package-lock.json
+      - name: Install actionlint at a fixed version
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
+          echo "$PWD" >> "$GITHUB_PATH"
+      # Shell checks stay off for now, to keep noise from existing scripts out (Q65).
+      - name: Check the workflows
+        working-directory: pr
+        run: actionlint -shellcheck= -pyflakes=
+      - name: Type checks and unit tests
+        if: env.FROZEN_ONLY != 'true'
+        working-directory: pr
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+      # The base's lint, so a PR can't loosen it. It reads the PR's frozen/ when
+      # that's all the PR changes, and the base's otherwise, as that's what runs.
+      - name: Lint the frozen tests
+        working-directory: pr
+        run: |
+          (cd ../base/frozen && npm ci --no-audit --no-fund)
+          target=../base/frozen
+          if [ "$FROZEN_ONLY" = true ]; then target=frozen; fi
+          node ../base/frozen/helpers/lint.ts "$target"
+      - name: Check the changed frozen tests and helpers
+        if: env.FROZEN_ONLY == 'true'
+        working-directory: pr/frozen
+        run: |
+          npm ci
+          npm run typecheck
+          npm run test:helpers
+
+  # ADR-0007's estimate (Q58). It reads the Terraform files only, with no plan and
+  # no AWS login, and only its Infracost steps get the key (Q4).
+  cost:
+    needs: rounds
+    if: needs.rounds.outputs.frozen_only == 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -107,10 +230,11 @@ jobs:
             echo "::notice::Adds \$${change} a month, within the \$1 limit."
           fi
 
-  # Only this job names the environment. On the deploy job it would change the
-  # token's sub, which the CI role refuses (Q58).
+  # Only this job and checklist name an environment. On the deploy job it would
+  # change the token's sub, which the CI role refuses (Q58). It waits for checks
+  # too, so you're never asked to approve a PR that's already failing.
   cost-approval:
-    needs: cost
+    needs: [checks, cost]
     if: needs.cost.outputs.needs_approval == 'true'
     runs-on: ubuntu-24.04
     environment: cost
@@ -118,28 +242,85 @@ jobs:
     steps:
       - run: echo "Approved, so the branch environment can deploy."
 
-  # Branch environments live in portfolio, whatever the episode's account (ADR-0011).
-  # Draft pushes don't deploy, and PRs from other repos are refused (Q5). It runs
-  # when the approval job is skipped, and never after a rejected or failed one.
+  # Deploys the branch environment, then runs the frozen tests from the PR's base
+  # commit against it (Q13), in deploy-target.yml's verify job. Branch
+  # environments live in portfolio, whatever the episode's account (ADR-0011).
+  # It runs when the approval job is skipped, and never after a rejected or failed one.
   branch:
-    needs: [cost, cost-approval]
+    needs: [checks, cost, cost-approval]
     if: >-
-      always() && needs.cost.result == 'success' &&
-      (needs.cost-approval.result == 'success' || needs.cost-approval.result == 'skipped') &&
-      github.event_name == 'pull_request' && github.event.action != 'closed' &&
-      !github.event.pull_request.draft &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      always() && needs.checks.result == 'success' && needs.cost.result == 'success' &&
+      (needs.cost-approval.result == 'success' || needs.cost-approval.result == 'skipped')
     concurrency:
       group: pr-${{ github.event.pull_request.number }}
       cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
+      pull-requests: write # for the retry report comment
     uses: ./.github/workflows/deploy-target.yml
     with:
       environment: pr-${{ github.event.pull_request.number }}
       account: portfolio
+      frozen_ref: ${{ github.event.pull_request.base.sha }}
     secrets: inherit
+
+  # The product checklist on the branch environment (Q10). A new push asks again,
+  # and cancels the older run's waiting request, which doesn't count as a round.
+  checklist:
+    needs: branch
+    if: always() && needs.branch.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: checklist
+    concurrency:
+      group: checklist-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions: {}
+    steps:
+      - run: echo "Checklist approved."
+
+  # The required check. GitHub treats a skipped check as passing, so this never
+  # skips on an open PR: it fails on drafts and other repos' PRs, and unless every
+  # job before it did what this path expects (Q62).
+  green:
+    needs: [rounds, checks, cost, cost-approval, branch, checklist]
+    if: always() && github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Pass only if every job before this one did
+        env:
+          DRAFT: ${{ github.event.pull_request.draft }}
+          OTHER_REPO: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          FROZEN_ONLY: ${{ needs.rounds.outputs.frozen_only }}
+          NEEDS_APPROVAL: ${{ needs.cost.outputs.needs_approval }}
+          ROUNDS: ${{ needs.rounds.result }}
+          CHECKS: ${{ needs.checks.result }}
+          COST: ${{ needs.cost.result }}
+          COST_APPROVAL: ${{ needs.cost-approval.result }}
+          BRANCH: ${{ needs.branch.result }}
+          CHECKLIST: ${{ needs.checklist.result }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          expect() { [ "$2" = "$3" ] || fail "$1 was $2, not $3."; }
+          [ "$OTHER_REPO" = false ] || fail "PRs from other repos don't run the chain (Q5)."
+          [ "$DRAFT" = false ] || fail "Draft PRs don't run the chain. Mark the PR ready for review."
+          expect rounds "$ROUNDS" success
+          expect checks "$CHECKS" success
+          if [ "$FROZEN_ONLY" = true ]; then
+            echo "Frozen-only PR: the lint passed and the deploy was skipped (Q19)."
+            exit 0
+          fi
+          expect cost "$COST" success
+          if [ "$NEEDS_APPROVAL" = true ]; then
+            expect cost-approval "$COST_APPROVAL" success
+          else
+            expect cost-approval "$COST_APPROVAL" skipped
+          fi
+          expect branch "$BRANCH" success
+          expect checklist "$CHECKLIST" success
+          echo "Every job passed."
 
   # Waits for a running deploy, through the same concurrency group.
   teardown:

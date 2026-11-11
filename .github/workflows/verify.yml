@@ -1,0 +1,102 @@
+# The user commits this, because the agent's App can't write workflows.
+# Runs the frozen tests against one target (Q13, Q62). frozen/ comes from the
+# ref the caller names: the PR's base commit, or main after a merge. So a run's
+# edits to frozen/ have no effect on its own PR. This job gets no AWS token.
+name: verify
+
+on:
+  workflow_call:
+    inputs:
+      base_url:
+        description: The target's address
+        type: string
+        required: true
+      frozen_ref:
+        description: The commit to take frozen/ from
+        type: string
+        required: true
+      branch_environment:
+        description: true for a branch environment, which uploads traces and comments on the PR
+        type: boolean
+        required: true
+
+permissions: {} # the caller grants these
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write # only the comment step uses the token
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.frozen_ref }}
+          sparse-checkout: frozen
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frozen/package-lock.json
+      - name: Install the frozen tests
+        working-directory: frozen
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      # One retry, and a test that needed it passes and is reported (Q40).
+      - name: Run the frozen tests
+        working-directory: frozen
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          FROZEN_TRACES: ${{ inputs.branch_environment && 'uploaded' || 'none' }}
+        run: npx playwright test
+      - name: Add the retry report to the summary
+        if: always() && hashFiles('frozen/reports/retry-report.md') != ''
+        run: cat frozen/reports/retry-report.md >> "$GITHUB_STEP_SUMMARY"
+      # Kept for the retro's tests-by-runs grid (Q66). No traces, cookies or bodies.
+      - name: Keep the reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frozen-reports
+          path: frozen/reports/
+          retention-days: 90
+          if-no-files-found: ignore
+      # Branch environments only, as Playwright can't redact traces and this repo is public.
+      - name: Keep the traces
+        if: always() && inputs.branch_environment
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frozen-traces
+          path: frozen/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+      # One comment per PR, updated in place. It appears once a test is retried or
+      # fails, and later runs keep it current.
+      - name: Comment on the PR
+        if: always() && inputs.branch_environment && hashFiles('frozen/reports/retry-report.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          marker='<!-- frozen-retry-report -->'
+          existing=$(gh api --paginate "repos/$GH_REPO/issues/$PR/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
+          count=$(jq '.flaky + .failed' frozen/reports/retry-report.json)
+          if [ "$count" -eq 0 ] && [ -z "$existing" ]; then exit 0; fi
+          {
+            echo "$marker"
+            cat frozen/reports/retry-report.md
+            echo
+            echo "From [this run]($RUN_URL), on commit ${SHA:0:7}."
+          } > comment.md
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/$GH_REPO/issues/comments/$existing" -F body=@comment.md >/dev/null
+          else
+            gh api --method POST "repos/$GH_REPO/issues/$PR/comments" -F body=@comment.md >/dev/null
+          fi
