@@ -1,4 +1,5 @@
 import { test as base, expect, type APIRequestContext, type APIResponse, type TestInfo } from "@playwright/test";
+import { EVIDENCE_ATTACHMENT, EvidenceLog } from "./evidence.js";
 
 // Q59: frozen tests face the same per-IP limit as visitors (120 a minute), so
 // every API call they make is paced instead of the limit being raised or skipped.
@@ -32,12 +33,19 @@ async function waitForSlot(testInfo: TestInfo): Promise<void> {
 
 type Tally = { calls: number; limited: string[] };
 
+// `fetch` takes its method from the options, and the others are named for theirs.
+function methodOf(property: string, options: unknown): string {
+  if (property !== "fetch") return property.toUpperCase();
+  const method = (options as { method?: unknown } | undefined)?.method;
+  return typeof method === "string" ? method.toUpperCase() : "GET";
+}
+
 const PACED_METHODS = new Set(["delete", "fetch", "get", "head", "patch", "post", "put"]);
 
 type Options = { allow429: boolean; apiBudget: number };
 
 export const test = base.extend<
-  Options & { tally: Tally; unpacedRequest: APIRequestContext; apiChecks: void }
+  Options & { tally: Tally; unpacedRequest: APIRequestContext; apiChecks: void; evidence: EvidenceLog }
 >({
   // Only the test that trips the limit on purpose sets this.
   allow429: [false, { option: true }],
@@ -46,6 +54,19 @@ export const test = base.extend<
   tally: async ({}, use) => {
     await use({ calls: 0, limited: [] });
   },
+
+  // Every attempt attaches what the network and page did, for the retry reporter.
+  evidence: [
+    async ({ baseURL }, use, testInfo) => {
+      const log = new EvidenceLog(baseURL, testInfo.retry);
+      await use(log);
+      await testInfo.attach(EVIDENCE_ATTACHMENT, {
+        body: JSON.stringify(log.data),
+        contentType: "application/json",
+      });
+    },
+    { auto: true, box: true },
+  ],
 
   // A separate context, for the one test that must reach the limit. It can't
   // reuse `request`, because the override below replaces that for every fixture.
@@ -56,7 +77,7 @@ export const test = base.extend<
   },
 
   // Direct API calls from a test are paced and counted.
-  request: async ({ request, tally }, use, testInfo) => {
+  request: async ({ request, tally, evidence, baseURL }, use, testInfo) => {
     const paced = new Proxy(request, {
       get(target, property, receiver) {
         const value: unknown = Reflect.get(target, property, receiver);
@@ -65,7 +86,16 @@ export const test = base.extend<
         return async (...args: unknown[]) => {
           await waitForSlot(testInfo);
           tally.calls += 1;
-          const response = (await value.apply(target, args)) as APIResponse;
+          const method = methodOf(String(property), args[1]);
+          const started = Date.now();
+          let response: APIResponse;
+          try {
+            response = (await value.apply(target, args)) as APIResponse;
+          } catch (error) {
+            evidence.failed(new URL(String(args[0]), baseURL).href, method, String(error));
+            throw error;
+          }
+          evidence.finished(response.url(), method, response.status(), Date.now() - started, response.headers());
           if (response.status() === 429) tally.limited.push(response.url());
           return response;
         };
@@ -75,12 +105,22 @@ export const test = base.extend<
   },
 
   // Calls the page makes to /api are paced and counted the same way.
-  page: async ({ page, tally }, use, testInfo) => {
+  page: async ({ page, tally, evidence }, use, testInfo) => {
     await page.route("**/api/**", async (route) => {
       await waitForSlot(testInfo);
       tally.calls += 1;
       await route.continue();
     });
+    page.on("requestfailed", (request) => {
+      evidence.failed(request.url(), request.method(), request.failure()?.errorText ?? "no response");
+    });
+    page.on("requestfinished", async (request) => {
+      const response = await request.response();
+      if (!response) return;
+      const { responseEnd } = request.timing();
+      evidence.finished(request.url(), request.method(), response.status(), responseEnd >= 0 ? responseEnd : null, response.headers());
+    });
+    page.on("pageerror", (error) => evidence.pageError(error.message));
     page.on("response", (response) => {
       if (response.status() === 429 && new URL(response.url()).pathname.startsWith("/api/")) {
         tally.limited.push(response.url());

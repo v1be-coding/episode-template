@@ -9,7 +9,13 @@ export default defineConfig({
   retryStrategy: "isolated",
   // One at a time, because every test shares this runner's IP and its limit.
   workers: 1,
-  reporter: "list",
+  // results.json and the retry report are kept for the retro (Q66). Neither holds
+  // traces, cookies or bodies, so both can be uploaded from any target.
+  reporter: [
+    ["list"],
+    ["json", { outputFile: "reports/results.json" }],
+    ["./helpers/retry-reporter.ts"],
+  ],
   use: {
     baseURL: process.env.BASE_URL,
     // Keeps the failed first attempt, which is the one worth reading. on-first-retry
@@ -17,7 +23,8 @@ export default defineConfig({
     trace: "retain-on-failure-and-retries",
   },
   projects: [
-    { name: "smoke", testIgnore: /rate-limit\.spec\.ts/ },
+    // helpers/test/ holds the helpers' own unit tests, which run with node --test.
+    { name: "smoke", testIgnore: [/rate-limit\.spec\.ts/, "helpers/**", "node_modules/**"] },
     // Last, because it uses up this IP's minute on purpose.
     { name: "rate-limit", testMatch: /rate-limit\.spec\.ts/, dependencies: ["smoke"] },
   ],
