@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, limitMessage, parseRetryAfter, RateLimitedError } from "./api.js";
+import {
+  api,
+  ApiError,
+  failureMessage,
+  limitMessage,
+  parseRetryAfter,
+  RateLimitedError,
+} from "./api.js";
 
 const respond = (status: number, body: string, headers: Record<string, string> = {}) =>
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status, headers })));
@@ -57,6 +64,32 @@ describe("parseRetryAfter", () => {
   it("falls back to a minute", () => {
     expect(parseRetryAfter(null)).toBe(60);
     expect(parseRetryAfter("soon")).toBe(60);
+  });
+});
+
+describe("failureMessage", () => {
+  it("shows the limit message for a rate-limited request", async () => {
+    respond(429, '{"error":"rate_limited"}', { "retry-after": "30" });
+
+    const error = await api("/api/notes/count").catch((e: unknown) => e);
+
+    expect(failureMessage(error)).toBe("Too many requests. Try again in 30 seconds.");
+  });
+
+  it.each([500, 404])("says unavailable for a %i", async (status) => {
+    respond(status, '{"error":"nope"}');
+
+    const error = await api("/api/notes/count").catch((e: unknown) => e);
+
+    expect(failureMessage(error)).toBe("unavailable");
+  });
+
+  it("says unavailable when the request gets no response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    const error = await api("/api/notes/count").catch((e: unknown) => e);
+
+    expect(failureMessage(error)).toBe("unavailable");
   });
 });
 

@@ -49,6 +49,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+// What a page line shows when its request failed: the limit message for a 429,
+// and "unavailable" for anything else, such as another status or no response.
+export function failureMessage(error: unknown): string {
+  return error instanceof RateLimitedError ? limitMessage(error) : "unavailable";
+}
+
 export function limitMessage(error: RateLimitedError): string {
   return error.reason === "daily_cap"
     ? "The AI feature is paused until tomorrow."
