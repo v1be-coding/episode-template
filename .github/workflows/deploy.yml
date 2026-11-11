@@ -86,7 +86,8 @@ jobs:
             exit 1
           fi
 
-  # Fast checks before anything costs money. Workflow syntax (Q65), type checks
+  # Fast checks before anything costs money. Workflow syntax (Q65), secrets in
+  # every file and in the PR's commits (Rule 6), lint, formatting, type checks
   # and unit tests, and the frozen lint from the base commit (Q64).
   checks:
     needs: rounds
@@ -97,11 +98,17 @@ jobs:
     env:
       ACTIONLINT_VERSION: 1.7.12
       ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      BETTERLEAKS_VERSION: 1.9.0
+      BETTERLEAKS_SHA256: f8b185a39ffcece2a1ca82bf3a4e7435cd81963ffd16b7a9128daf75f35f6de7
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       FROZEN_ONLY: ${{ needs.rounds.outputs.frozen_only }}
     steps:
+      # Full history, so Betterleaks can read the PR's own commits.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: pr
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -128,11 +135,32 @@ jobs:
       - name: Check the workflows
         working-directory: pr
         run: actionlint -shellcheck= -pyflakes=
-      - name: Type checks and unit tests
+      - name: Install Betterleaks at a fixed version
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLo betterleaks.tar.gz "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "$BETTERLEAKS_SHA256  betterleaks.tar.gz" | sha256sum -c -
+          tar -xzf betterleaks.tar.gz betterleaks
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: Install
+        working-directory: pr
+        run: npm ci
+      # Known secret formats in every tracked file, with the pre-commit hook's
+      # config, so a commit that skipped the hook is still caught.
+      - name: Scan files for secrets
+        working-directory: pr
+        run: npx secretlint --format=github "**/*"
+      # Unknown formats too, by entropy, in every commit the PR adds. --redact keeps
+      # a found secret out of this public log, and live validation stays off.
+      - name: Scan the PR's commits for secrets
+        working-directory: pr
+        run: betterleaks git . --log-opts="$BASE_SHA..$HEAD_SHA" --redact --no-banner
+      - name: Lint, formatting, type checks and unit tests
         if: env.FROZEN_ONLY != 'true'
         working-directory: pr
         run: |
-          npm ci
+          npm run lint
+          npm run format:check
           npm run typecheck
           npm test
       # The base's lint, so a PR can't loosen it. It reads the PR's frozen/ when

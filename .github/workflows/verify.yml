@@ -51,6 +51,8 @@ jobs:
         env:
           BASE_URL: ${{ inputs.base_url }}
           FROZEN_TRACES: ${{ inputs.branch_environment && 'uploaded' || 'none' }}
+          # Acceptance tests run on branch environments only (Q29), in helpers/projects.ts.
+          FROZEN_TARGET: ${{ inputs.branch_environment && 'branch' || 'production' }}
         run: npx playwright test
       - name: Add the retry report to the summary
         if: always() && hashFiles('frozen/reports/retry-report.md') != ''
