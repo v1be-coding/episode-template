@@ -16,7 +16,7 @@ function App() {
   return (
     <main>
       <h1>V1be Coding</h1>
-      <p>API: {status}</p>
+      <p>API status: {status}</p>
     </main>
   );
 }
