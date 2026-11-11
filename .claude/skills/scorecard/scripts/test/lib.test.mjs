@@ -5,6 +5,7 @@ import {
   approvalWaitMs,
   attemptOfBranch,
   attemptStarts,
+  attemptTally,
   formatDuration,
   greenAt,
   grid,
@@ -125,4 +126,24 @@ test("draws the grid, with a test failing across runs called out", () => {
 
 test("says so when there are no reports", () => {
   assert.equal(grid([]), "No frozen reports found.");
+});
+
+test("counts the landed attempt once, and not a merged one that was reverted", () => {
+  const tally = attemptTally([
+    { merged: false, labels: ["failed-attempt"] },
+    { merged: true, labels: ["failed-attempt"] }, // landed, then reverted
+    { merged: true, labels: [], name: "third" },
+  ]);
+  assert.equal(tally.attempts, 3);
+  assert.equal(tally.failed, 2);
+  assert.equal(tally.landed?.name, "third");
+});
+
+test("adds no extra attempt when nothing landed", () => {
+  const tally = attemptTally([
+    { merged: false, labels: ["failed-attempt"] },
+    { merged: false, labels: ["failed-attempt"] },
+    { merged: false, labels: ["failed-attempt"] },
+  ]);
+  assert.deepEqual(tally, { failed: 3, landed: null, attempts: 3 });
 });

@@ -9,6 +9,7 @@ import {
   approvalWaitMs,
   attemptOfBranch,
   attemptStarts,
+  attemptTally,
   formatDuration,
   greenAt,
   grid,
@@ -71,8 +72,10 @@ try {
     .map((pr) => ({ pr, attempt: attemptOfBranch(pr.head.ref, spec) }))
     .filter((p) => p.attempt !== null)
     .sort((a, b) => a.attempt - b.attempt);
-  const failed = prs.filter((p) => p.pr.labels.some((l) => l.name === "failed-attempt"));
-  const landed = prs.find((p) => p.pr.merged_at);
+  const tally = attemptTally(
+    prs.map((p) => ({ ...p, merged: Boolean(p.pr.merged_at), labels: p.pr.labels.map((l) => l.name) })),
+  );
+  const landed = tally.landed;
 
   const lines = [`# Scorecard for #${spec}`, ""];
   const row = (k, v) => lines.push(`| ${k} | ${v} |`);
@@ -111,7 +114,14 @@ try {
   }
 
   row("Time to green", timeToGreen);
-  row("Attempts", `${failed.length + 1} (${failed.length} labelled \`failed-attempt\`, plus one)`);
+  row(
+    "Attempts",
+    landed
+      ? `${tally.attempts} (${tally.failed} labelled \`failed-attempt\`, plus the one that landed)`
+      : tally.attempts
+        ? `${tally.attempts}, all labelled \`failed-attempt\`, and none landed`
+        : "None yet",
+  );
   row("Frozen tests passing on attempt 1's first CI run", firstRunPassed);
   row("Landed", landed ? `#${landed.pr.number}` : "No");
 
