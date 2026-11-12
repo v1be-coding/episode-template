@@ -46,12 +46,30 @@ jobs:
       pull-requests: read
     outputs:
       frozen_only: ${{ steps.files.outputs.frozen_only }}
+      frozen_ref: ${{ steps.frozen.outputs.ref }}
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       BRANCH: ${{ github.head_ref }}
       PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
+      # frozen/ comes from main as this run's merge commit saw it: the merge's
+      # parent that isn't the PR's head. The branch deploys that same merge commit,
+      # so tests and code match, a re-run gets the same tests, and a frozen fix on
+      # main reaches the PR on its next push. pull_request.base.sha doesn't move
+      # when main does (docs/research-frozen-tests-source.md, Q13).
+      - name: Find main's commit in this run's merge
+        id: frozen
+        run: |
+          parents=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA" --jq '.parents[].sha')
+          ref=$(grep -vx "$HEAD_SHA" <<<"$parents" || true)
+          if [ "$(wc -l <<<"$parents")" -ne 2 ] || [ "$(grep -c . <<<"$ref")" -ne 1 ]; then
+            echo "::error::Expected $GITHUB_SHA to merge $HEAD_SHA with one commit from main. Parents: $parents"
+            exit 1
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Frozen tests from main at $ref." >> "$GITHUB_STEP_SUMMARY"
       # Renames count from both ends, so moving a file into frozen/ isn't frozen-only.
       - name: Check whether the PR changes only frozen/
         id: files
@@ -88,7 +106,7 @@ jobs:
 
   # Fast checks before anything costs money. Workflow syntax (Q65), secrets in
   # every file and in the PR's commits (Rule 6), lint, formatting, type checks
-  # and unit tests, and the frozen lint from the base commit (Q64).
+  # and unit tests, and the frozen lint from main's commit in the merge (Q64).
   checks:
     needs: rounds
     runs-on: ubuntu-24.04
@@ -113,7 +131,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: base
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ needs.rounds.outputs.frozen_ref }}
           sparse-checkout: frozen
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -163,8 +181,8 @@ jobs:
           npm run format:check
           npm run typecheck
           npm test
-      # The base's lint, so a PR can't loosen it. It reads the PR's frozen/ when
-      # that's all the PR changes, and the base's otherwise, as that's what runs.
+      # main's lint, so a PR can't loosen it. It reads the PR's frozen/ when
+      # that's all the PR changes, and main's otherwise, as that's what runs.
       - name: Lint the frozen tests
         working-directory: pr
         run: |
@@ -275,7 +293,7 @@ jobs:
   # environments live in portfolio, whatever the episode's account (ADR-0011).
   # It runs when the approval job is skipped, and never after a rejected or failed one.
   branch:
-    needs: [checks, cost, cost-approval]
+    needs: [rounds, checks, cost, cost-approval]
     if: >-
       always() && needs.checks.result == 'success' && needs.cost.result == 'success' &&
       (needs.cost-approval.result == 'success' || needs.cost-approval.result == 'skipped')
@@ -290,7 +308,7 @@ jobs:
     with:
       environment: pr-${{ github.event.pull_request.number }}
       account: portfolio
-      frozen_ref: ${{ github.event.pull_request.base.sha }}
+      frozen_ref: ${{ needs.rounds.outputs.frozen_ref }}
     secrets: inherit
 
   # The product checklist on the branch environment (Q10). A new push asks again,

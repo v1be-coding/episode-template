@@ -1,6 +1,6 @@
 # The user commits this, because the agent's App can't write workflows.
 # Runs the frozen tests against one target (Q13, Q62). frozen/ comes from the
-# ref the caller names: the PR's base commit, or main after a merge. So a run's
+# ref the caller names: main's commit in the PR's merge, or main after a merge. So a run's
 # edits to frozen/ have no effect on its own PR. This job gets no AWS token.
 name: verify
 
