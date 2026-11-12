@@ -1,3 +1,4 @@
 # Frozen tests are the gate a run is judged by, so a run can't change them alone (ADR-0013).
 /frozen/ @emilianocasijr
 /.github/CODEOWNERS @emilianocasijr
+/.github/workflows/ @emilianocasijr
