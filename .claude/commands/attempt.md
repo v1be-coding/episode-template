@@ -19,7 +19,8 @@ Run this in an interactive session, not `claude -p`: CI waits can outlast a back
 
 ## 1. Start
 
-1. Count earlier attempts by branch name:
+1. Say back which spec this is: `gh issue view $ARGUMENTS --json title --jq .title`. The argument is the spec's issue number, not an attempt number.
+2. Count earlier attempts by branch name:
 
    ```sh
    gh pr list --state all --label failed-attempt --json headRefName \
@@ -28,14 +29,14 @@ Run this in an interactive session, not `claude -p`: CI waits can outlast a back
 
    This attempt is that number plus one. At 3 earlier attempts, stop: the series allows no more. Also stop if an `attempt-$ARGUMENTS-*` PR is still open, because another attempt is running.
 
-2. Comment on the spec issue: `Attempt <n> started at <UTC time, ISO 8601>.` The scorecard measures time to green from this comment.
-3. Start from an up-to-date `main`. The integration branch is `attempt-$ARGUMENTS-<n>`, which must be new: CI counts failed rounds by branch name.
+3. Comment on the spec issue: `Attempt <n> started at <UTC time, ISO 8601>.` The scorecard measures time to green from this comment.
+4. Start from an up-to-date `main`. The integration branch is `attempt-$ARGUMENTS-<n>`, which must be new: CI counts failed rounds by branch name.
 
 ## 2. Build
 
 Read `.claude/skills/implement-spec/SKILL.md` and follow it, with spec issue #$ARGUMENTS and the integration branch above. It can't be started as a skill, so read it and do what it says, with these settings for this run:
 
-- **Open the draft PR in its step 3.** This run asks for one. The PR body closes the spec and every ticket with `Closes #<n>` lines.
+- **Open the draft PR in its step 3.** This run asks for one. The PR body closes the spec and every ticket with `Closes #<n>` lines. Its runs fail `green` on purpose and don't count as rounds.
 - **Seams are already confirmed.** The seams named in the tickets and the test contract count as confirmed for `tdd`, so implementers don't ask the user.
 - **No hard resets.** An implementer whose worktree isn't on the integration branch runs `git switch -C <its branch> <integration branch>`. The guardrail blocks `git reset --hard`.
 - **`code-review`'s fixed point is `main`.**
@@ -48,14 +49,21 @@ Read `.claude/skills/implement-spec/SKILL.md` and follow it, with spec issue #$A
 
 ## 4. Watch CI and fix it
 
-Wait with Bash's `run_in_background`, which tells you when the command exits:
+Watch the newest run for the PR's head commit, not `gh pr checks --watch`, which exits on an older draft run's failure. Wait with Bash's `run_in_background`, which tells you when the command exits. First wait for `branch / deploy`:
 
 ```sh
-gh pr checks <pr> --watch --fail-fast --interval 60
+sha=$(gh pr view <pr> --json headRefOid --jq .headRefOid)
+until id=$(gh run list --workflow deploy.yml --commit "$sha" --event pull_request --json databaseId --jq '.[0].databaseId // empty') && [ -n "$id" ]; do sleep 60; done
+until gh run view "$id" --json status,jobs --jq '.status == "completed" or any(.jobs[]; .name == "branch / deploy" and .status == "completed")' | grep -q true; do sleep 60; done
+gh run view "$id" --json status,conclusion,jobs --jq '{status, conclusion, jobs: [.jobs[] | {name, conclusion}]}'
 ```
+
+If `branch / deploy` passed, post the checklist comment below, since `checklist` waits for the user and the user needs it. Then wait for the whole run with `until [ "$(gh run view "$id" --json status --jq .status)" = completed ]; do sleep 60; done`. After every push, start again from the new head commit.
 
 Don't use `gh run watch`, which this container's `gh` refuses, or the Monitor tool, whose watches end within 30 minutes. Never use a foreground `sleep`.
 
+- **A run with no jobs:** if the run is still `queued` with no jobs after 15 minutes, GitHub stranded it, as in its Actions outages. Push an empty commit that says why.
+- **"Rate limit exceeded":** Claude Code's warning has been wrong every time so far. Run `gh api rate_limit --jq .resources.core` before acting on it, and treat only a real `gh` error as a limit.
 - **The checklist comment:** once the first `branch / deploy` job passes, comment on the PR once. The URL stays the same for later pushes.
   - The branch URL, from the line `Branch environment: <url>` in that job's log.
   - The spec's product checklist, copied as a task list.
@@ -63,7 +71,7 @@ Don't use `gh run watch`, which this container's `gh` refuses, or the Monitor to
 - **Logs:** `gh api --allow-escape-sequences repos/<repo>/actions/jobs/<id>/logs`. `gh run view --log` returns nothing while any job is still waiting, such as `checklist`.
 - **Frozen test failures:** the PR comment starting `<!-- frozen-retry-report -->` lists each failed or retried test with a hint. The hint is a lead, not a verdict.
 - **One push per failed run.** Runs don't cancel each other, so every run that fails counts as a round, including one still going when you push. Read every failure in the run, fix them together, then push once. You can't rerun a job, so a temporary failure also needs a push, such as an empty commit that says why.
-- **Rounds:** the `rounds` job prints `Failed rounds before this run: N of 5.` If a run fails after that line said `4 of 5`, the attempt is over: go to [Fail the attempt](#fail-the-attempt) without pushing again.
+- **Rounds:** the `rounds` job prints `Failed rounds before this run: N of 5.` That count leaves out the current run, so when you report rounds used after a failed run, add one. If a run fails after that line said `4 of 5`, the attempt is over: go to [Fail the attempt](#fail-the-attempt) without pushing again.
 - **Waiting for the user** isn't a failure. Keep waiting.
   - A `checklist` or `cost-approval` job that **failed** means the user rejected it, and the attempt has failed.
   - One that was **cancelled** was replaced by a newer push.
