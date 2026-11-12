@@ -29,7 +29,8 @@ export function hintFor(attempt: FailedAttempt): { hint: Hint; reason: string } 
 
   const infra: string[] = [];
   if (evidence.failedRequests.length > 0) infra.push("a request got no response");
-  if (evidence.errorResponses.some((r) => r.status === 429)) infra.push("a 429");
+  // A test that floods the API on purpose makes its own 429s (#46's attempt 1).
+  if (!evidence.allow429 && evidence.errorResponses.some((r) => r.status === 429)) infra.push("a 429");
   if (evidence.errorResponses.some((r) => GATEWAY_ERRORS.has(r.status))) infra.push("a 502, 503 or 504");
   if (evidence.errorResponses.some((r) => r.headers["cf-mitigated"])) infra.push("a Cloudflare challenge");
   if ((evidence.slowest?.elapsedMs ?? 0) > SLOW_MS) infra.push("a request slower than 10 s");
@@ -65,7 +66,8 @@ export function summariseEvidence(evidence: Evidence | null): string {
   for (const r of evidence.errorResponses.slice(0, 3)) {
     const time = r.elapsedMs === null ? "" : ` after ${seconds(r.elapsedMs)}`;
     const headers = Object.entries(r.headers).map(([k, v]) => `${k}: ${v}`).join(", ");
-    parts.push(`${r.method} ${r.path} → ${r.status}${time}${headers ? ` (${headers})` : ""}`);
+    const expected = r.status === 429 && evidence.allow429 ? ", expected by this test" : "";
+    parts.push(`${r.method} ${r.path} → ${r.status}${time}${headers ? ` (${headers})` : ""}${expected}`);
   }
   const more = evidence.failedRequests.length + evidence.errorResponses.length - parts.length + evidence.dropped;
   if (more > 0) parts.push(`${more} more`);

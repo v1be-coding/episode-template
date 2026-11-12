@@ -5,6 +5,9 @@
 
 export type Evidence = {
   retry: number;
+  // The test expects 429s, as the rate-limit check does with allow429. Missing in
+  // evidence recorded before this field existed.
+  allow429?: boolean;
   failedRequests: { method: string; path: string; error: string; atMs: number }[];
   errorResponses: {
     status: number;
@@ -29,9 +32,9 @@ export class EvidenceLog {
   private readonly origin: string | null;
   private readonly startedAt = Date.now();
 
-  constructor(baseURL: string | undefined, retry: number) {
+  constructor(baseURL: string | undefined, retry: number, allow429 = false) {
     this.origin = baseURL ? new URL(baseURL).origin : null;
-    this.data = { retry, failedRequests: [], errorResponses: [], slowest: null, pageErrors: [], dropped: 0 };
+    this.data = { retry, allow429, failedRequests: [], errorResponses: [], slowest: null, pageErrors: [], dropped: 0 };
   }
 
   // Records a request that got no response at all.
