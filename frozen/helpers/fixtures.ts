@@ -57,8 +57,8 @@ export const test = base.extend<
 
   // Every attempt attaches what the network and page did, for the retry reporter.
   evidence: [
-    async ({ baseURL }, use, testInfo) => {
-      const log = new EvidenceLog(baseURL, testInfo.retry);
+    async ({ baseURL, allow429 }, use, testInfo) => {
+      const log = new EvidenceLog(baseURL, testInfo.retry, allow429);
       await use(log);
       await testInfo.attach(EVIDENCE_ATTACHMENT, {
         body: JSON.stringify(log.data),

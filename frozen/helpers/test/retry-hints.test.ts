@@ -53,6 +53,17 @@ describe("retry hints", () => {
     });
   }
 
+  it("doesn't count a 429 the test expects, and says it was expected", () => {
+    const evidence = quiet({ allow429: true, errorResponses: [response(429)] });
+    assert.equal(hint(evidence), "unclear");
+    assert.equal(hint(evidence, "Error: strict mode violation\nReceived string: two messages"), "app-looking");
+    assert.match(buildReport([{ title: "smoke › rate-limit", outcome: "unexpected", location: "rate-limit.spec.ts:16", attempt: { status: "failed", error: "Error: boom", evidence }, retryNote: "failed again" }], { tracesUploaded: false }), /→ 429 after 0\.3 s, expected by this test/);
+  });
+
+  it("still counts a 503 when the test expects 429s", () => {
+    assert.equal(hint(quiet({ allow429: true, errorResponses: [response(429), response(503)] })), "infra-looking");
+  });
+
   it("calls a page error app-looking", () => {
     assert.equal(hint(quiet({ pageErrors: ["TypeError: x is undefined"] })), "app-looking");
   });
