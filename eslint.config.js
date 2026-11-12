@@ -1,4 +1,4 @@
-// App lint (Q65). frozen/ has its own lint, run from the base commit (Q64).
+// App lint (Q65). frozen/ has its own lint, run from main's commit in the PR's merge (Q64).
 import js from "@eslint/js";
 import prettier from "eslint-config-prettier";
 import reactHooks from "eslint-plugin-react-hooks";

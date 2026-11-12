@@ -1,4 +1,4 @@
-// The frozen lint (Q39, Q64). CI runs this copy from the PR's base commit, so a
+// The frozen lint (Q39, Q64). CI runs this copy from main's commit in the PR's merge, so a
 // run can't loosen it. Agent-written Playwright tests have been seen returning
 // early or skipping and still passing, so a frozen test must be one straight
 // line of steps and assertions. Shared logic that needs branches belongs in
