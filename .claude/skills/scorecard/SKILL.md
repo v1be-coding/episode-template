@@ -37,7 +37,7 @@ Open the run's retry report (the PR comment starting `<!-- frozen-retry-report -
 
 These need a person, so ask the user for anything GitHub can't show:
 
-- **Build cost** and **model used:** ask the user. Claude Code shows them, and the repo doesn't.
+- **Build cost** and **model used:** run `node .claude/skills/scorecard/scripts/build-cost.mjs $ARGUMENTS` in this session. It reads this machine's Claude Code transcripts, not GitHub, so run it on the machine where the attempts ran. The headline is the `/attempt` sessions, at list price (the series glossary's "Build cost"). The Spec phase shows on its own line when its sessions are in this repo's transcripts folder. Model used is the build cost's main model; ignore Claude Code's background Haiku calls. If the script finds no sessions, ask the user.
 - **What the spec missed:** read the comments each failed attempt left on the spec issue, and any stop over a frozen test. Summarise in one line each.
 - **Frozen tests that turned out wrong:** the script lists PRs that changed `frozen/` after attempt 1 began. For each, read it and decide with the user whether it fixed a wrong test, which counts, or only added coverage, which doesn't (Q30).
 
