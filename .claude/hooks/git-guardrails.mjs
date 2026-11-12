@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 const PROTECTED = "main";
 
 // Splits a command line into simple commands, then words, honouring quotes.
+// Each command's `seps` lists the operators that ended it, such as "&&" or ";".
 // Good enough for the commands an agent writes, not a full shell parser.
 export function simpleCommands(line) {
   const commands = [];
@@ -19,9 +20,13 @@ export function simpleCommands(line) {
     word = "";
     inWord = false;
   };
-  const endCommand = () => {
+  const endCommand = (sep) => {
     endWord();
-    if (words.length) commands.push(words);
+    if (words.length) {
+      words.seps = [];
+      commands.push(words);
+    }
+    if (sep && commands.length) commands[commands.length - 1].seps.push(sep);
     words = [];
   };
   for (let i = 0; i < line.length; i++) {
@@ -37,10 +42,13 @@ export function simpleCommands(line) {
       word += line[++i];
       inWord = true;
     } else if (/\s/.test(c)) {
-      if (c === "\n") endCommand();
+      if (c === "\n") endCommand(";");
       else endWord();
+    } else if ((c === "&" || c === "|") && line[i + 1] === c) {
+      endCommand(c + c);
+      i++;
     } else if (";&|()".includes(c)) {
-      endCommand();
+      endCommand(c);
     } else {
       word += c;
       inWord = true;
@@ -56,7 +64,9 @@ export function simpleCommands(line) {
         ["env", "command", "exec", "sudo", "time"].includes(w[i]))
     )
       i++;
-    return w.slice(i);
+    const words = w.slice(i);
+    words.seps = w.seps;
+    return words;
   });
 }
 
@@ -72,6 +82,28 @@ function gitSubcommand(words) {
 }
 
 const shortFlags = (args) => args.filter((a) => /^-[A-Za-z]+$/.test(a)).join("");
+
+// Words that publish work: a push, or opening a PR.
+const publishes = (words) =>
+  (words[0] === "git" && gitSubcommand(words).sub === "push") ||
+  (words[0] === "gh" && words[1] === "pr" && words[2] === "create");
+
+// After a commit, a push or PR must be joined by && all the way, so a commit the
+// pre-commit hook rejects stops the chain. `set -e` earlier in the script also counts.
+function chainProblem(commands) {
+  const setE = (w) => w[0] === "set" && w.slice(1).some((a) => /^-[a-z]*e/.test(a));
+  for (let c = 0; c < commands.length; c++) {
+    const w = commands[c];
+    if (w[0] !== "git" || gitSubcommand(w).sub !== "commit") continue;
+    if (commands.slice(0, c).some(setE)) continue;
+    for (let n = c + 1; n < commands.length; n++) {
+      const between = commands.slice(c, n).flatMap((x) => x.seps ?? []);
+      if (publishes(commands[n]) && between.some((s) => !["&&", "(", ")"].includes(s)))
+        return "A push or gh pr create after git commit must be joined with &&, so a failed commit stops the chain (#47).";
+    }
+  }
+  return null;
+}
 
 function pushProblem(args, currentBranch) {
   const flags = shortFlags(args);
@@ -96,7 +128,10 @@ function pushProblem(args, currentBranch) {
 }
 
 export function problem(command, currentBranch = () => null) {
-  for (const words of simpleCommands(command)) {
+  const commands = simpleCommands(command);
+  const chain = chainProblem(commands);
+  if (chain) return chain;
+  for (const words of commands) {
     if (words[0] === "git") {
       const { sub, args, dir } = gitSubcommand(words);
       const branch = () => currentBranch(dir);
@@ -113,9 +148,10 @@ export function problem(command, currentBranch = () => null) {
         sub === "branch" &&
         (flags.includes("D") ||
           (args.includes("--delete") && args.includes("--force")) ||
-          (flags.includes("d") && (flags.includes("f") || args.includes("--force"))))
+          (flags.includes("d") && (flags.includes("f") || args.includes("--force")))) &&
+        args.some((a) => !a.startsWith("-") && a.startsWith("attempt-"))
       )
-        return "git branch -D is blocked. A failed attempt keeps its branch (Q8).";
+        return "git branch -D is blocked on attempt-* branches. A failed attempt keeps its branch (Q8).";
     }
     if (words[0] === "gh" && words[1] === "pr" && words[2] === "merge" && !words.includes("--auto"))
       return "gh pr merge is only allowed with --auto, so GitHub merges when the required check passes (ADR-0013).";
