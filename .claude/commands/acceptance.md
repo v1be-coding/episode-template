@@ -10,9 +10,11 @@ Read **only** the spec issue and its comments, the tickets it links, `frozen/` a
 
 ## 1. Check the spec for gaps first
 
-List everything a test would need: each route's method, path, request and response shapes and status codes; the roles, accessible names and visible text a visitor relies on; and any data that must already exist.
+List everything a test would need, using "What a spec states" in `docs/agents/spec.md`.
 
-If the spec doesn't say something a test needs, comment the list of gaps on the spec issue and stop. Write no contract, tests or PR: a guessed contract line becomes a wrong frozen test.
+Then read every existing test in `frozen/`, smoke tests included, and list each one this spec would make fail. A test the spec says how to change is fine: change it in this PR, and name it in the PR's table. Any other is a gap.
+
+If the spec doesn't say something a test needs, comment the list of gaps on the spec issue and stop. Write no contract, tests or PR: a guessed contract line becomes a wrong frozen test. Comments only answer a gap by pointing at body text, as `docs/agents/spec.md` says, so read the body for the answer.
 
 ## 2. Write the test contract
 
