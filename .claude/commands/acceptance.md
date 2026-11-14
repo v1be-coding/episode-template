@@ -79,6 +79,7 @@ From `frozen/`, with `<main's site>` from the README's "Sites" section:
 
 ```sh
 npm ci
+npx playwright install chromium
 npm run lint
 npm run typecheck
 node helpers/contract-coverage.ts "$TMPDIR/spec-body.md" acceptance/<feature>.spec.ts
@@ -86,6 +87,7 @@ BASE_URL=<main's site> npx playwright test --project=acceptance --no-deps --retr
 ```
 
 - `contract-coverage.ts` fails if a Routes or Page line has no test tagged with it. Add the missing test; never drop the line. Data and Test ID lines are exempt. Pass every file holding this spec's tests.
+- `npx playwright install chromium` gets the browser version `frozen/`'s Playwright pins. The dev container has the system libraries but no browser, so leave out `--with-deps`.
 - `--no-deps` keeps a smoke failure from skipping the new tests, and `--retries=0` shows each failure once.
 - Use the production site of a portfolio episode, or the demo site of a café episode. **Never café production**, whose data is real.
 - **Every new test must fail on `main`, because the feature is missing.** A test that passes proves nothing: fix it, or tell the user the spec asks for something that's already there. A skipped test, a syntax error, a wrong `BASE_URL` or a 429 doesn't count as a failure.
