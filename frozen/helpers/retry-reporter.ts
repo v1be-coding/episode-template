@@ -2,10 +2,13 @@
 // failed attempt's evidence and a hint (Q66). It writes:
 //   reports/retry-report.md    for the job summary and the PR comment
 //   reports/retry-report.json  counts the workflow reads to decide on a comment
+// It also prints the acceptance tests' API-call count, so /attempt finds it in the
+// job log of a passing run too.
 // The workflow sets FROZEN_TRACES=uploaded on branch environments.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import type { FullConfig, Reporter, TestCase, TestResult } from "@playwright/test/reporter";
+import { API_CALLS_ANNOTATION, countApiCalls, describeApiCalls } from "./api-calls.js";
 import { EVIDENCE_ATTACHMENT, type Evidence } from "./evidence.js";
 import { buildReport, type Entry } from "./retry-hints.js";
 
@@ -31,13 +34,23 @@ export default class RetryReporter implements Reporter {
     });
     const folder = join(this.root, "reports");
     mkdirSync(folder, { recursive: true });
-    const markdown = buildReport(entries, { tracesUploaded: process.env.FROZEN_TRACES === "uploaded" });
+    const calls = countApiCalls(
+      this.tests.map((test) => ({
+        project: test.parent.project()?.name,
+        failed: test.outcome() === "unexpected",
+        results: test.results.map((result) => ({ retry: result.retry, annotations: result.annotations })),
+      })),
+    );
+    const apiCalls = calls.tests > 0 ? describeApiCalls(calls) : undefined;
+    if (apiCalls) console.log(`\n${apiCalls}`);
+    const markdown = buildReport(entries, { tracesUploaded: process.env.FROZEN_TRACES === "uploaded", apiCalls });
     writeFileSync(join(folder, "retry-report.md"), markdown);
     writeFileSync(
       join(folder, "retry-report.json"),
       JSON.stringify({
         flaky: entries.filter((e) => e.outcome === "flaky").length,
         failed: entries.filter((e) => e.outcome === "unexpected").length,
+        apiCalls: calls.firstAttempts,
       }),
     );
   }
@@ -61,10 +74,19 @@ export default class RetryReporter implements Reporter {
         status: failed.status,
         error: (error?.message ?? "").replace(ANSI, ""),
         evidence: evidenceOf(failed),
+        pacedMs: failed.annotations
+          .filter((a) => a.type === "paced")
+          .reduce((sum, a) => sum + Number(/(\d+) ms/.exec(a.description ?? "")?.[1] ?? 0), 0),
+        apiCalls: apiCallsOf(failed),
       },
       retryNote: !next ? "no retry ran" : next.status === "passed" ? `passed ${gap} later` : "failed again",
     };
   }
+}
+
+function apiCallsOf(result: TestResult): number | undefined {
+  const annotation = result.annotations.find((a) => a.type === API_CALLS_ANNOTATION);
+  return annotation ? Number(annotation.description ?? 0) : undefined;
 }
 
 function evidenceOf(result: TestResult): Evidence | null {
