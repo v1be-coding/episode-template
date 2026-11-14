@@ -92,7 +92,7 @@ BASE_URL=<main's site> npx playwright test --project=acceptance --no-deps --retr
 - Use the production site of a portfolio episode, or the demo site of a café episode. **Never café production**, whose data is real.
 - **Every new test must fail on `main`, because the feature is missing.** A test that passes proves nothing: fix it, or tell the user the spec asks for something that's already there. A skipped test, a syntax error, a wrong `BASE_URL` or a 429 doesn't count as a failure.
 - Write down each test's failure reason for the PR.
-- Then run `node helpers/api-calls.ts`. It totals the API calls the run made. A failing test stops early, so read the total as a floor and count the calls each new test would make once it passes. If either is over the limit, stop and tell the user before opening a PR. Don't raise timeouts, the pace or the rate limit: past the pace, held-back calls make page assertions time out.
+- Then run `node helpers/api-calls.ts`. It totals the acceptance tests' API calls. A failing test stops early, so the total is too low: also count the calls each new test would make once it passes. If either is over the limit, stop and tell the user before opening a PR. Don't raise timeouts, the pace or the rate limit: past the pace, held-back calls make page assertions time out. CI prints the real count on every run, and `/attempt` reports it.
 
 ## 5. Open the PR
 

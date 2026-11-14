@@ -1,31 +1,52 @@
 // Run with: npm run test:helpers
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { totalApiCalls } from "../api-calls.ts";
+import { countApiCalls, describeApiCalls, testsFromReport } from "../api-calls.ts";
 
-const result = (calls: number, other: { type: string; description?: string }[] = []) => ({
+const result = (calls: number, retry = 0, other: { type: string; description?: string }[] = []) => ({
+  retry,
   annotations: [...other, { type: "api-calls", description: String(calls) }],
 });
 
-describe("api calls total", () => {
-  it("sums every attempt across nested suites", () => {
+describe("api calls", () => {
+  it("counts acceptance tests only, across nested suites, with retries apart", () => {
     const report = {
       suites: [
         {
-          specs: [{ tests: [{ results: [result(2)] }] }],
-          suites: [{ specs: [{ tests: [{ results: [result(5), result(4)] }] }] }],
+          specs: [{ tests: [{ projectName: "acceptance", status: "expected", results: [result(2)] }] }],
+          suites: [
+            {
+              specs: [
+                { tests: [{ projectName: "acceptance", status: "flaky", results: [result(5), result(4, 1)] }] },
+                { tests: [{ projectName: "smoke", status: "expected", results: [result(30)] }] },
+                { tests: [{ projectName: "rate-limit", status: "expected", results: [result(3)] }] },
+              ],
+            },
+          ],
         },
       ],
     };
-    assert.equal(totalApiCalls(report), 11);
+    assert.deepEqual(countApiCalls(testsFromReport(report)), { firstAttempts: 7, withRetries: 11, failedTests: 0, tests: 2 });
   });
 
   it("ignores other annotations", () => {
-    const report = { specs: [{ tests: [{ results: [result(3, [{ type: "paced", description: "waited 10 ms" }])] }] }] };
-    assert.equal(totalApiCalls(report), 3);
+    const report = {
+      specs: [{ tests: [{ projectName: "acceptance", results: [result(3, 0, [{ type: "paced", description: "waited 10 ms" }])] }] }],
+    };
+    assert.equal(countApiCalls(testsFromReport(report)).firstAttempts, 3);
   });
 
   it("is zero for an empty report", () => {
-    assert.equal(totalApiCalls({}), 0);
+    assert.deepEqual(countApiCalls(testsFromReport({})), { firstAttempts: 0, withRetries: 0, failedTests: 0, tests: 0 });
+  });
+
+  it("calls the count a floor when tests failed", () => {
+    const text = describeApiCalls({ firstAttempts: 12, withRetries: 12, failedTests: 3, tests: 4 });
+    assert.match(text, /^API calls by acceptance tests: 12 \(limit 80\)\. 3 of 4 tests failed/);
+  });
+
+  it("says to stop when over the limit", () => {
+    assert.match(describeApiCalls({ firstAttempts: 81, withRetries: 90, failedTests: 0, tests: 9 }), /90 counting retries\. Over the limit/);
+    assert.doesNotMatch(describeApiCalls({ firstAttempts: 80, withRetries: 80, failedTests: 0, tests: 9 }), /Over/);
   });
 });

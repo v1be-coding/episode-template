@@ -82,6 +82,16 @@ describe("retry hints", () => {
     assert.equal(hint(quiet(), error), "unclear");
   });
 
+  it("calls a timeout after held-back calls pace-looking", () => {
+    const result = hintFor({ status: "timedOut", error: "Test timeout of 30000ms exceeded.", evidence: quiet(), pacedMs: 12_000 });
+    assert.equal(result.hint, "pace-looking");
+    assert.match(result.reason, /held back 12\.0 s/);
+  });
+
+  it("doesn't call held-back calls pace-looking without a timeout", () => {
+    assert.equal(hintFor({ status: "failed", error: "Error: boom", evidence: quiet(), pacedMs: 500 }).hint, "unclear");
+  });
+
   it("lets network trouble outweigh app signs", () => {
     assert.equal(hint(quiet({ pageErrors: ["TypeError"], errorResponses: [response(503)] })), "infra-looking");
   });
@@ -98,6 +108,19 @@ describe("the report", () => {
 
   it("says so when every test passed first time", () => {
     assert.match(buildReport([], { tracesUploaded: false }), /every test passed on its first attempt/);
+  });
+
+  it("shows the API-call line, and explains pace-looking", () => {
+    const calls = "API calls by acceptance tests: 95 (limit 80).";
+    assert.match(buildReport([], { tracesUploaded: false, apiCalls: calls }), /first attempt\n\nAPI calls by acceptance tests: 95/);
+    const paced: Entry = {
+      ...entry("unexpected"),
+      attempt: { status: "timedOut", error: "Test timeout", evidence: quiet(), pacedMs: 9000, apiCalls: 40 },
+    };
+    const report = buildReport([paced], { tracesUploaded: false, apiCalls: calls });
+    assert.match(report, /calls held back 9\.0 s for the rate limit; 40 API calls; no failed or slow requests/);
+    assert.match(report, /\*\*pace-looking:\*\* the run held API calls back/);
+    assert.match(report, /API calls by acceptance tests: 95/);
   });
 
   it("lists retries and failures with their hints and evidence", () => {
