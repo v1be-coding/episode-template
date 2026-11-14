@@ -12,6 +12,15 @@
 - **Terms with more than one meaning:** define them where the spec first uses them. For #42, "the origin check" and "a failed request" each cost `/acceptance` a stop.
 - **What the acceptance tests leave out:** behaviour the spec wants but no frozen test should check, such as a timing or a look, so `/acceptance` doesn't guess at it.
 
+## Responses the template already makes
+
+A spec doesn't restate these, and a feature mustn't change them without saying so, as the next section describes. Both come with `content-type: application/json` and a `retry-after` header.
+
+- **Over the per-IP limit** (120 requests per IP per fixed 60-second window), any route: `429` with exactly `{ "error": "rate_limited", "message": "Too many requests", "retryAfterSeconds": <n> }`.
+- **AI spend cap reached,** on a route wrapped in `withSpendCap`: `429` with exactly `{ "error": "daily_cap", "message": "The AI feature is paused until tomorrow", "retryAfterSeconds": <n> }`.
+
+`retryAfterSeconds` is server-made. A test proves it by bounds: it equals the `retry-after` header, and for `rate_limited` it is between 1 and 60, the time left in the window.
+
 ## Changes to frozen tests that already exist
 
 If the feature changes behaviour that an existing frozen test checks, such as the smoke tests, say so in the spec, and say what the test should check instead. `/acceptance` fixes it in the same frozen PR.
