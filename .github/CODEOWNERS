@@ -1,4 +1,7 @@
 # Frozen tests are the gate a run is judged by, so a run can't change them alone (ADR-0013).
 /frozen/ @emilianocasijr
+# The reviewer's rules and the agent's skills, commands and hooks, so a run can't loosen its own review.
+/CODING_STANDARDS.md @emilianocasijr
+/.claude/ @emilianocasijr
 /.github/CODEOWNERS @emilianocasijr
 /.github/workflows/ @emilianocasijr
