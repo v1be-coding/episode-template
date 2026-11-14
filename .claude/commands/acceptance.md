@@ -39,6 +39,29 @@ Never renumber a line once its tests have merged. A later spec fix adds new numb
 
 Put them in `frozen/acceptance/<feature>.spec.ts`.
 
+**Pick each test's level from its contract line.** Agents fake whatever layer the tests don't reach, so the page needs a real round trip. Edge cases are cheaper and less flaky through the API.
+
+| Contract line                                               | Level                                                                                                                                                   |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Page: roles, names, visible text                            | At least one browser test with **no `page.route`**, so the visitor's action reaches the real backend. A line covered only by mocked tests isn't covered |
+| Routes, rule edge cases, validation, auth refusals, the 429 | API test, through `request`                                                                                                                             |
+| An error state a visitor sees                               | Browser test, faking the failure with `page.route`                                                                                                      |
+
+No unit tests in `frozen/`: they need names from inside the code, which the spec doesn't fix. A feature with no page gets API tests only.
+
+**Response bodies:** always `toEqual` on the whole body, error bodies included, so a field the spec didn't name fails. For a value the server makes, such as a generated `id` or a timestamp, take it from the response, prove it real the way the spec says, then use it in `toEqual`:
+
+```ts
+const created = await post.json();
+const read = await request.get(`/api/notes/${created.id}`);
+expect(await read.json()).toEqual({ id: created.id, text }); // round trip proves the id
+expect(created).toEqual({ id: created.id, text });
+```
+
+Bounds work too: a timestamp between the test's start and end, or a count one higher than before. Never `expect.any`, `expect.anything` or `expect.stringMatching`; the frozen lint rejects them.
+
+**Text that can repeat:** where the contract gives a count, assert it with `toHaveCount`. Otherwise use `.first()`, so a text shown twice can't make a strict locator fail.
+
 - Import `test` and `expect` from `../helpers/fixtures.js`, which paces API calls under the per-IP limit.
 - Start each test's title with the contract lines it checks, such as `C3, C4: a saved note shows in the list`, and tag it with them too: `test("C3, C4: …", { tag: ["@C3", "@C4"] }, async …)`. Every assertion must trace to one of them.
 - Find things with `getByRole`, `getByLabel` and `getByText`. Use `getByTestId` only for a contract test ID.
@@ -65,6 +88,7 @@ BASE_URL=<main's site> npx playwright test --project=acceptance --no-deps --retr
 - Use the production site of a portfolio episode, or the demo site of a café episode. **Never café production**, whose data is real.
 - **Every new test must fail on `main`, because the feature is missing.** A test that passes proves nothing: fix it, or tell the user the spec asks for something that's already there. A skipped test, a syntax error, a wrong `BASE_URL` or a 429 doesn't count as a failure.
 - Write down each test's failure reason for the PR.
+- Then run `node helpers/api-calls.ts`. It totals the API calls the run made. A failing test stops early, so read the total as a floor and count the calls each new test would make once it passes. If either is over the limit, stop and tell the user before opening a PR. Don't raise timeouts, the pace or the rate limit: past the pace, held-back calls make page assertions time out.
 
 ## 5. Open the PR
 

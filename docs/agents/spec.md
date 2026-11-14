@@ -4,9 +4,10 @@
 
 ## What a spec states
 
-- **Every route:** method, path, request shape, and the exact response for each case: success, each error, and each status code. Name every field a response holds, and say whether more fields are allowed.
+- **Every route:** method, path, request shape, and the exact response for each case: success, each error, and each status code. List every field a response holds, error bodies included. The tests compare whole bodies, so any other field fails them.
+- **Values the server makes,** such as a generated ID or a timestamp: let the client choose the value where the API allows, and the test checks the exact value it sent. Otherwise say how a test proves the value is real: a round trip (the ID from the POST reads back the same record) or bounds (a time within the request, a count one higher).
 - **Every error state a visitor can see:** what triggers it, and the exact text or role that shows it.
-- **The page:** the roles, accessible names and visible text a visitor relies on.
+- **The page:** the roles, accessible names and visible text a visitor relies on. Where it matters how many times a text appears, say how many.
 - **Data that must already exist:** rows the feature reads but doesn't create.
 - **Terms with more than one meaning:** define them where the spec first uses them. For #42, "the origin check" and "a failed request" each cost `/acceptance` a stop.
 - **What the acceptance tests leave out:** behaviour the spec wants but no frozen test should check, such as a timing or a look, so `/acceptance` doesn't guess at it.

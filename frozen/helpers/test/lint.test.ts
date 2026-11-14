@@ -52,6 +52,17 @@ describe("the frozen lint", () => {
     });
   }
 
+  for (const matcher of ["any(String)", "anything()", "stringMatching(/x/)", "not.stringMatching(/x/)"]) {
+    it(`rejects expect.${matcher}`, () => {
+      const found = messages(`test("t", async () => { expect({ id: "x" }).toEqual({ id: expect.${matcher} }); });`);
+      assert.ok(found.some((m) => m.includes("lets a value through unchecked")), found.join("\n"));
+    });
+  }
+
+  it("allows the same names off other objects", () => {
+    assert.deepEqual(messages(`test("t", async () => { expect(list.any()).toBe(other.anything); });`), []);
+  });
+
   it("rejects a test with no assertion", () => {
     assert.deepEqual(messages(`test("t", async ({ page }) => { await page.goto("/"); });`), [
       "this test has no `expect(...)` assertion",
