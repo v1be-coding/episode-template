@@ -52,7 +52,15 @@ describe("the frozen lint", () => {
     });
   }
 
-  for (const matcher of ["any(String)", "anything()", "stringMatching(/x/)", "not.stringMatching(/x/)"]) {
+  for (const matcher of [
+    "any(String)",
+    "anything()",
+    "stringMatching(/x/)",
+    "not.stringMatching(/x/)",
+    "objectContaining({})",
+    "arrayContaining([])",
+    "stringContaining('x')",
+  ]) {
     it(`rejects expect.${matcher}`, () => {
       const found = messages(`test("t", async () => { expect({ id: "x" }).toEqual({ id: expect.${matcher} }); });`);
       assert.ok(found.some((m) => m.includes("lets a value through unchecked")), found.join("\n"));

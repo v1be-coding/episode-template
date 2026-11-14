@@ -27,7 +27,14 @@ const EXPECT_ROOTS = new Set(["expect", "expect.soft", "expect.poll"]);
 // Loose matchers let a value through without checking it. A test takes the value
 // from the response, proves it real by a round trip or bounds, then uses it in
 // `toEqual` (see "Response bodies" in .claude/commands/acceptance.md).
-const LOOSE_MATCHERS = new Set(["any", "anything", "stringMatching"]);
+const LOOSE_MATCHERS = new Set([
+  "any",
+  "anything",
+  "stringMatching",
+  "objectContaining",
+  "arrayContaining",
+  "stringContaining",
+]);
 
 // Lints one file's text and returns what it found. `file` is only for messages.
 export function lintSource(file: string, text: string): Finding[] {
