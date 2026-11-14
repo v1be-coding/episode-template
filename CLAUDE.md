@@ -22,4 +22,4 @@ GitHub Issues in `v1be-coding/<this repo>`, through `gh`, with no triage labels.
 
 ### Domain docs
 
-Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root, plus the series' shared ones. See `docs/agents/domain.md`.
+Single-context. `GLOSSARY.md` and `docs/adr/` at the repo root hold this episode's terms and decisions. They don't exist until `/grill-with-docs` creates them in the spec phase, so a missing file is normal. Shared terms and decisions are in the series repo. See `docs/agents/domain.md`.
