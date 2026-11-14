@@ -1,4 +1,5 @@
 import { test as base, expect, type APIRequestContext, type APIResponse, type TestInfo } from "@playwright/test";
+import { API_CALLS_ANNOTATION } from "./api-calls.js";
 import { EVIDENCE_ATTACHMENT, EvidenceLog } from "./evidence.js";
 
 // Q59: frozen tests face the same per-IP limit as visitors (120 a minute), so
@@ -9,7 +10,6 @@ export const PACE = { calls: 100, windowMs: 60_000 };
 // A test that makes more API calls than this is probably facing an app that
 // floods its own API, which pacing alone would hide.
 export const DEFAULT_API_BUDGET = 50;
-
 // One list for the whole run, which works because the config sets workers: 1.
 const sent: number[] = [];
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -132,8 +132,10 @@ export const test = base.extend<
   // Runs after every test. Any 429 is a failure unless the test expects one, and
   // a test over its budget fails too.
   apiChecks: [
-    async ({ tally, allow429, apiBudget }, use) => {
+    async ({ tally, allow429, apiBudget }, use, testInfo) => {
       await use();
+      // Read by helpers/api-calls.ts, which /acceptance runs to check a suite stays under PACE.
+      testInfo.annotations.push({ type: API_CALLS_ANNOTATION, description: String(tally.calls) });
       expect(tally.calls, "API calls this test made").toBeLessThanOrEqual(apiBudget);
       expect(allow429 ? [] : tally.limited, "API calls answered 429").toEqual([]);
     },

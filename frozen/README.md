@@ -22,6 +22,7 @@ CI rejects any test file here that uses one of these. A test must be one straigh
 | `return` | Could end a test before its assertions |
 | `.skip`, `.only`, `.fixme`, `.fail` | Turn tests off, or make a failing test pass |
 | A `test(...)` with no `expect(...).matcher()` | Asserts nothing |
+| `expect.any`, `expect.anything`, `expect.stringMatching`, `expect.stringContaining`, `expect.objectContaining`, `expect.arrayContaining` | Let a value through unchecked. Prove it real, then use it in `toEqual` |
 
 `helpers/` is exempt. Shared logic that needs branches goes there, and code owner review covers it like the rest of this folder.
 
@@ -29,6 +30,8 @@ CI rejects any test file here that uses one of these. A test must be one straigh
 npm run lint            # the frozen lint
 npm run typecheck       # TypeScript, for tests and helpers
 npm run test:helpers    # the helpers' own unit tests
+node helpers/api-calls.ts   # API calls in the last run, against the suite's limit
+node helpers/contract-coverage.ts <spec-body.md> <test file>...   # every Routes and Page line has a tagged test
 ```
 
 ## Retries and the retry report

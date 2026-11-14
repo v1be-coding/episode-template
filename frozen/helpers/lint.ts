@@ -24,6 +24,18 @@ const BANNED_MODIFIERS: Record<string, string> = {
 
 const EXPECT_ROOTS = new Set(["expect", "expect.soft", "expect.poll"]);
 
+// Loose matchers let a value through without checking it. A test takes the value
+// from the response, proves it real by a round trip or bounds, then uses it in
+// `toEqual` (see "Response bodies" in .claude/commands/acceptance.md).
+const LOOSE_MATCHERS = new Set([
+  "any",
+  "anything",
+  "stringMatching",
+  "objectContaining",
+  "arrayContaining",
+  "stringContaining",
+]);
+
 // Lints one file's text and returns what it found. `file` is only for messages.
 export function lintSource(file: string, text: string): Finding[] {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKind(file));
@@ -43,6 +55,9 @@ export function lintSource(file: string, text: string): Finding[] {
       const name = node.name.text;
       const banned = BANNED_MODIFIERS[name];
       if (banned) report(node.name, banned);
+      if (LOOSE_MATCHERS.has(name) && isExpectOrNot(node.expression)) {
+        report(node.name, `\`expect.${name}\` lets a value through unchecked: prove it real, then use it in \`toEqual\``);
+      }
       if (name === "catch" && ts.isCallExpression(node.parent) && node.parent.expression === node) {
         report(node.name, "`.catch()` can swallow a failed assertion");
       }
@@ -83,6 +98,17 @@ function scriptKind(file: string): ts.ScriptKind {
 // or `test.describe(...)`, which hold no assertions of their own.
 function isTestCall(node: ts.Node): node is ts.CallExpression {
   return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "test";
+}
+
+// `expect` or `expect.not`, which the loose matchers hang off.
+function isExpectOrNot(node: ts.Expression): boolean {
+  if (ts.isIdentifier(node)) return node.text === "expect";
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    node.name.text === "not" &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "expect"
+  );
 }
 
 function isFunction(node: ts.Node): node is ts.ArrowFunction | ts.FunctionExpression {
