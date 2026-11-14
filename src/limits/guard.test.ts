@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ORIGIN_HEADER } from "./client-ip.js";
-import { guardRequest } from "./guard.js";
+import { guardRequest, spendCapResponse } from "./guard.js";
 import { recordMetric } from "./metrics.js";
 import { RATE_LIMIT } from "./rate-limit.js";
 import type { Store } from "./store.js";
@@ -30,6 +30,7 @@ describe("guardRequest", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
   it("refuses the raw execute-api address before counting anything", async () => {
@@ -42,16 +43,22 @@ describe("guardRequest", () => {
   });
 
   it("answers over the limit with a handled 429", async () => {
+    // 15 s into a 60-second window, so 45 s are left.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-14T12:00:15Z"));
     send.mockResolvedValue({ Attributes: { count: { N: String(RATE_LIMIT.requests + 1) } } });
 
     const response = await guardRequest(event(throughCloudFront), db);
 
-    expect(response).toMatchObject({
+    // The exact body in docs/agents/spec.md, which the frozen smoke test also checks.
+    expect(response).toEqual({
       statusCode: 429,
-      headers: { "retry-after": expect.stringMatching(/^\d+$/) },
-    });
-    expect(JSON.parse((response as { body: string }).body)).toMatchObject({
-      error: "rate_limited",
+      headers: { "content-type": "application/json", "retry-after": "45" },
+      body: JSON.stringify({
+        error: "rate_limited",
+        message: "Too many requests",
+        retryAfterSeconds: 45,
+      }),
     });
     expect(recordMetric).toHaveBeenCalledWith("RateLimited", { client: expect.any(String) });
   });
@@ -61,5 +68,19 @@ describe("guardRequest", () => {
     send.mockRejectedValue(new Error("throttled"));
 
     expect(await guardRequest(event(throughCloudFront), db)).toBeUndefined();
+  });
+});
+
+describe("spendCapResponse", () => {
+  it("answers with the daily_cap 429 in docs/agents/spec.md", () => {
+    expect(spendCapResponse(3600)).toEqual({
+      statusCode: 429,
+      headers: { "content-type": "application/json", "retry-after": "3600" },
+      body: JSON.stringify({
+        error: "daily_cap",
+        message: "The AI feature is paused until tomorrow",
+        retryAfterSeconds: 3600,
+      }),
+    });
   });
 });
