@@ -11,9 +11,16 @@ test("going over the per-IP limit gives a handled 429", async ({ unpacedRequest,
   const { response } = await goOverTheLimit(unpacedRequest);
 
   expect(response?.status()).toBe(429);
-  expect(await response?.json()).toMatchObject({ error: "rate_limited" });
+  // retryAfterSeconds is server-made: proved by bounds (the time left in the
+  // 60-second window) and by matching the header (docs/agents/spec.md).
   const retryAfter = Number(response?.headers()["retry-after"]);
-  expect(retryAfter).toBeGreaterThan(0);
+  expect(retryAfter).toBeGreaterThanOrEqual(1);
+  expect(retryAfter).toBeLessThanOrEqual(60);
+  expect(await response?.json()).toEqual({
+    error: "rate_limited",
+    message: "Too many requests",
+    retryAfterSeconds: retryAfter,
+  });
 
   // Every line that calls the API shows the message under a flood, so a page
   // with more than one call shows it more than once (#42, attempt 1).
