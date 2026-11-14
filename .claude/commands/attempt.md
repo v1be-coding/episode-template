@@ -39,7 +39,7 @@ Read `.claude/skills/implement-spec/SKILL.md` and follow it, with spec issue #$A
 - **Open the draft PR in its step 3.** This run asks for one. The PR body closes the spec and every ticket with `Closes #<n>` lines. Its runs fail `green` on purpose and don't count as rounds.
 - **Seams are already confirmed.** The seams named in the tickets and the test contract count as confirmed for `tdd`, so implementers don't ask the user.
 - **No hard resets.** An implementer whose worktree isn't on the integration branch runs `git switch -C <its branch> <integration branch>`. The guardrail blocks `git reset --hard`.
-- **`code-review`'s fixed point is `main`.**
+- **`code-review`'s fixed point is `main`, and so are its standards.** Give the Standards sub-agent `main`'s copy of each standards file, from `git show origin/main:<file>`, not the checkout's. A run's own changes to those files don't count in its review.
 - If the spec lists seed rows in its test contract, add them to `src/db/seed-data.ts`.
 
 ## 3. Land
