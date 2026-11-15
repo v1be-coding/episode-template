@@ -34,12 +34,19 @@ jobs:
           export AWS_ROLE_ARN="arn:aws:iam::$ACCOUNT_ID:role/v1be-$EPISODE-ci"
           export AWS_WEB_IDENTITY_TOKEN_FILE="$RUNNER_TEMP/oidc-token"
 
+          # On its own line, so a refusal fails this step. Inside the loop's < <( ),
+          # bash -e ignored it, and the retry found nothing under deny-all (phase F).
+          if ! keys=$(aws s3api list-objects-v2 --bucket v1be-portfolio-state --prefix "$EPISODE/pr-" \
+            --query 'Contents[].Key' --output json); then
+            echo "::error::Couldn't list branch environments, so some may still be running."
+            exit 1
+          fi
+
           found=()
           while read -r name; do
             state=$(gh pr view "${name#pr-}" --json state --jq .state)
             if [ "$state" != OPEN ]; then found+=("$name"); fi
-          done < <(aws s3api list-objects-v2 --bucket v1be-portfolio-state --prefix "$EPISODE/pr-" \
-            --query 'Contents[].Key' --output json | jq -r '.[]?' | grep -E '/terraform\.tfstate$' | cut -d/ -f2)
+          done < <(jq -r '.[]?' <<<"$keys" | grep -E '/terraform\.tfstate$' | cut -d/ -f2)
 
           list=$(printf '%s\n' "${found[@]}" | jq -Rnc '[inputs | select(length > 0)]')
           echo "Closed PRs with an environment: $list"
@@ -63,9 +70,10 @@ jobs:
       environment: ${{ matrix.environment }}
     secrets: inherit
 
+  # Either job failing may leave AWS resources running.
   report:
-    needs: teardown
-    if: always() && needs.teardown.result == 'failure'
+    needs: [find, teardown]
+    if: always() && (needs.find.result == 'failure' || needs.teardown.result == 'failure')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

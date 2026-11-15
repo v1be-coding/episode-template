@@ -63,11 +63,20 @@ jobs:
             echo "AWS_WEB_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/oidc-token"
             echo "AWS_REGION=ap-southeast-1"
           } >> "$GITHUB_ENV"
-      # A PR that was never ready has no environment.
+      # A PR that was never ready has no environment. A refusal must fail here, not
+      # read as "nothing there": under the Budgets action's deny-all, that left the
+      # environment running with every job green (phase F). HeadObject can't tell
+      # the two apart, as S3 answers 403 for a missing key without a bucket-wide
+      # list right, so this lists the one key instead.
       - name: Check for an environment
         id: state
         run: |
-          if aws s3api head-object --bucket "$STATE_BUCKET" --key "$STATE_KEY" >/dev/null 2>&1; then
+          if ! found=$(aws s3api list-objects-v2 --bucket "$STATE_BUCKET" --prefix "$STATE_KEY" \
+            --query "length(Contents[?Key=='$STATE_KEY'] || \`[]\`)" --output text); then
+            echo "::error::Couldn't check for this environment's state, so it may still be running."
+            exit 1
+          fi
+          if [ "$found" = 1 ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "No environment to remove."
