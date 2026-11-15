@@ -1,6 +1,7 @@
 # The user commits this, because the agent's App can't write workflows.
 # Each week, removes any branch environment whose PR is closed, and opens an issue
-# if one still won't go. Runs on main, which AWS trusts (ADR-0011).
+# if one still won't go. Runs on main, which AWS trusts (ADR-0011). Skipped in
+# episode-template while it has no EPISODE variable, as it has no site.
 name: teardown retry
 
 on:
@@ -12,6 +13,7 @@ permissions: {} # nothing unless a job asks
 
 jobs:
   find:
+    if: (vars.EPISODE != '' || github.repository != 'v1be-coding/episode-template')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
