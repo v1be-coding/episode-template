@@ -5,6 +5,9 @@
 #   then verify) → checklist → green
 # A PR that changes only frozen/ runs rounds, checks and green. Closing a PR
 # destroys its environment.
+# episode-template has no site since smoke-test was removed after phase F. While
+# it has no EPISODE variable it runs rounds, checks and green only, and never
+# signs in to AWS. In any other repo a missing EPISODE still fails the deploy.
 name: deploy
 
 on:
@@ -17,7 +20,7 @@ permissions: {} # nothing unless a job asks
 
 jobs:
   production:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && (vars.EPISODE != '' || github.repository != 'v1be-coding/episode-template')
     concurrency:
       group: production
       cancel-in-progress: false
@@ -202,7 +205,7 @@ jobs:
   # no AWS login, and only its Infracost steps get the key (Q4).
   cost:
     needs: rounds
-    if: needs.rounds.outputs.frozen_only == 'false'
+    if: needs.rounds.outputs.frozen_only == 'false' && (vars.EPISODE != '' || github.repository != 'v1be-coding/episode-template')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -339,6 +342,7 @@ jobs:
         env:
           DRAFT: ${{ github.event.pull_request.draft }}
           OTHER_REPO: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          NO_SITE: ${{ vars.EPISODE == '' && github.repository == 'v1be-coding/episode-template' }}
           FROZEN_ONLY: ${{ needs.rounds.outputs.frozen_only }}
           NEEDS_APPROVAL: ${{ needs.cost.outputs.needs_approval }}
           ROUNDS: ${{ needs.rounds.result }}
@@ -358,6 +362,10 @@ jobs:
             echo "Frozen-only PR: the lint passed and the deploy was skipped (Q19)."
             exit 0
           fi
+          if [ "$NO_SITE" = true ]; then
+            echo "No site: episode-template has no EPISODE variable, so there's nothing to deploy."
+            exit 0
+          fi
           expect cost "$COST" success
           if [ "$NEEDS_APPROVAL" = true ]; then
             expect cost-approval "$COST_APPROVAL" success
@@ -372,7 +380,8 @@ jobs:
   teardown:
     if: >-
       github.event_name == 'pull_request' && github.event.action == 'closed' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (vars.EPISODE != '' || github.repository != 'v1be-coding/episode-template')
     concurrency:
       group: pr-${{ github.event.pull_request.number }}
       cancel-in-progress: false
