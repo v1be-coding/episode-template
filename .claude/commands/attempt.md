@@ -70,7 +70,7 @@ Don't use `gh run watch`, which this container's `gh` refuses, or the Monitor to
   - `Try your own values, not the ones in the tests.`
 - **Logs:** `gh api --allow-escape-sequences repos/<repo>/actions/jobs/<id>/logs`. `gh run view --log` returns nothing while any job is still waiting, such as `checklist`.
 - **Frozen test failures:** the PR comment starting `<!-- frozen-retry-report -->` lists each failed or retried test with a hint. The hint is a lead, not a verdict.
-- **Too many API calls:** the frozen tests hold calls back to stay under the rate limit, so too many calls show up as timeouts. Watch for a `pace-looking` hint, or a log line `API calls by acceptance tests: N (limit 80)` that says it's over the limit. Then check where the calls come from. If the page makes more calls than it needs, fix the app. If the tests' own calls are over the limit, no change to the app can pass them: [stop over a frozen test](#stop-over-a-frozen-test) now, and don't spend rounds on it.
+- **Too many API calls:** each frozen test reserves its `apiBudget` before it starts, and fails if it makes more calls than that. A `pace-looking` hint, or the failure `API calls this test made`, means a test went over. Check where the calls come from. If the page makes more calls than it needs, fix the app. If the test's own steps need more than its budget, no change to the app can pass it: [stop over a frozen test](#stop-over-a-frozen-test) now, and don't spend rounds on it.
 - **One push per failed run.** Runs don't cancel each other, so every run that fails counts as a round, including one still going when you push. Read every failure in the run, fix them together, then push once. You can't rerun a job, so a temporary failure also needs a push, such as an empty commit that says why.
 - **Rounds:** the `rounds` job prints `Failed rounds before this run: N of 5.` That count leaves out the current run, so when you report rounds used after a failed run, add one. If a run fails after that line said `4 of 5`, the attempt is over: go to [Fail the attempt](#fail-the-attempt) without pushing again.
 - **Waiting for the user** isn't a failure. Keep waiting.
@@ -100,7 +100,7 @@ gh run view "$id" --json conclusion,url
 
 ## Stop over a frozen test
 
-When a frozen test looks wrong, for example it contradicts the spec or its contract line, two tests can't both pass, or the tests' own API calls are over the limit:
+When a frozen test looks wrong, for example it contradicts the spec or its contract line, two tests can't both pass, or a test's own steps need more API calls than its `apiBudget`:
 
 1. Comment on the spec issue. Name the test file and title, quote the assertion, quote the contract line it conflicts with, and say why both can't hold.
 2. Fail the attempt as below. A spec PR fixes the test before the next attempt.
