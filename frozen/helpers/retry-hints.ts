@@ -4,9 +4,9 @@
 // `unclear`, and never block anything. Tune them in the retro.
 import type { Evidence } from "./evidence.ts";
 
-// pace-looking: calls were held back to stay under the rate limit, then the test
-// timed out. Either the page makes more calls than it needs, or the frozen tests
-// together make more than PACE allows, which no change to the app can fix.
+// pace-looking: calls were held back mid-test to stay under the rate limit, then
+// the test timed out. Each test reserves its budget first, so it went over its own
+// apiBudget: either the page makes more calls than it needs, or the test needs more.
 export type Hint = "pace-looking" | "infra-looking" | "app-looking" | "unclear";
 
 export type FailedAttempt = {
@@ -117,7 +117,7 @@ export function buildReport(entries: Entry[], options: { tracesUploaded: boolean
   lines.push("");
   if (entries.some((e) => hintFor(e.attempt).hint === "pace-looking")) {
     lines.push(
-      "**pace-looking:** the run held API calls back to stay under the rate limit. If the page makes more calls than it needs, that's the app. If the tests' own calls are over the limit, the frozen tests are too big, and no change to the app fixes it.",
+      "**pace-looking:** API calls were held back mid-test. Each test reserves its `apiBudget` before it starts, so this test went over its own budget. If the page makes more calls than it needs, that's the app. If the test's own steps need more, the frozen test needs a bigger `apiBudget`, and no change to the app fixes it.",
       "",
     );
   }

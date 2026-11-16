@@ -111,7 +111,7 @@ describe("the report", () => {
   });
 
   it("shows the API-call line, and explains pace-looking", () => {
-    const calls = "API calls by acceptance tests: 95 (limit 80).";
+    const calls = "API calls by acceptance tests: 95 .";
     assert.match(buildReport([], { tracesUploaded: false, apiCalls: calls }), /first attempt\n\nAPI calls by acceptance tests: 95/);
     const paced: Entry = {
       ...entry("unexpected"),
@@ -119,7 +119,7 @@ describe("the report", () => {
     };
     const report = buildReport([paced], { tracesUploaded: false, apiCalls: calls });
     assert.match(report, /calls held back 9\.0 s for the rate limit; 40 API calls; no failed or slow requests/);
-    assert.match(report, /\*\*pace-looking:\*\* the run held API calls back/);
+    assert.match(report, /\*\*pace-looking:\*\* API calls were held back mid-test/);
     assert.match(report, /API calls by acceptance tests: 95/);
   });
 

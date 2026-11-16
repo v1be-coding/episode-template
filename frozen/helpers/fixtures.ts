@@ -1,11 +1,11 @@
 import { test as base, expect, type APIRequestContext, type APIResponse, type TestInfo } from "@playwright/test";
 import { API_CALLS_ANNOTATION } from "./api-calls.js";
 import { EVIDENCE_ATTACHMENT, EvidenceLog } from "./evidence.js";
+import { PACE, callWait, reservationWait } from "./pace.js";
 
-// Q59: frozen tests face the same per-IP limit as visitors (120 a minute), so
-// every API call they make is paced instead of the limit being raised or skipped.
-// Tests import `test` and `expect` from here, and the pacing is automatic.
-export const PACE = { calls: 100, windowMs: 60_000 };
+// Tests import `test` and `expect` from here, and the pacing is automatic: each
+// test reserves its API budget before it starts, and every call is paced (Q59).
+export { PACE };
 
 // A test that makes more API calls than this is probably facing an app that
 // floods its own API, which pacing alone would hide.
@@ -15,17 +15,15 @@ const sent: number[] = [];
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Waits until a call fits under PACE in the trailing window, and reports any wait.
+// After a test's reservation, only a test over its own budget ever waits here.
 async function waitForSlot(testInfo: TestInfo): Promise<void> {
   let waited = 0;
-  for (;;) {
-    const now = Date.now();
-    while (sent.length > 0 && now - (sent[0] ?? now) >= PACE.windowMs) sent.shift();
-    if (sent.length < PACE.calls) break;
-    const wait = (sent[0] ?? now) + PACE.windowMs - now;
+  for (let wait = callWait(sent, Date.now()); wait > 0; wait = callWait(sent, Date.now())) {
     waited += wait;
     await sleep(wait);
   }
   sent.push(Date.now());
+  while (sent.length > 0 && Date.now() - (sent[0] ?? 0) >= PACE.windowMs) sent.shift();
   if (waited > 0) {
     testInfo.annotations.push({ type: "paced", description: `waited ${waited} ms for the rate limit` });
   }
@@ -45,13 +43,35 @@ const PACED_METHODS = new Set(["delete", "fetch", "get", "head", "patch", "post"
 type Options = { allow429: boolean; apiBudget: number };
 
 export const test = base.extend<
-  Options & { tally: Tally; unpacedRequest: APIRequestContext; apiChecks: void; evidence: EvidenceLog }
+  Options & { reserve: void; tally: Tally; unpacedRequest: APIRequestContext; apiChecks: void; evidence: EvidenceLog }
 >({
   // Only the test that trips the limit on purpose sets this.
   allow429: [false, { option: true }],
   apiBudget: [DEFAULT_API_BUDGET, { option: true }],
 
-  tally: async ({}, use) => {
+  // Before the test starts, waits until its whole budget fits under PACE, so no
+  // call is held back mid-test. The wait has its own timeout, apart from the test's.
+  reserve: [
+    async ({ apiBudget }, use, testInfo) => {
+      if (apiBudget > PACE.calls) {
+        throw new Error(`apiBudget ${apiBudget} is over PACE (${PACE.calls} a minute), so this test's calls can't all fit.`);
+      }
+      let waited = 0;
+      for (let wait = reservationWait(sent, Date.now(), apiBudget); wait > 0; wait = reservationWait(sent, Date.now(), apiBudget)) {
+        waited += wait;
+        await sleep(wait);
+      }
+      if (waited > 0) {
+        testInfo.annotations.push({ type: "reserved", description: `waited ${waited} ms before starting, so its API budget fit under the pace` });
+      }
+      await use();
+    },
+    { auto: true, timeout: PACE.windowMs + 10_000 },
+  ],
+
+  // Depends on reserve, so the reservation comes before any fixture that calls the API.
+  tally: async ({ reserve }, use) => {
+    void reserve;
     await use({ calls: 0, limited: [] });
   },
 
@@ -134,7 +154,7 @@ export const test = base.extend<
   apiChecks: [
     async ({ tally, allow429, apiBudget }, use, testInfo) => {
       await use();
-      // Read by helpers/api-calls.ts, which /acceptance runs to check a suite stays under PACE.
+      // Read by helpers/api-calls.ts, which totals the suite's calls.
       testInfo.annotations.push({ type: API_CALLS_ANNOTATION, description: String(tally.calls) });
       expect(tally.calls, "API calls this test made").toBeLessThanOrEqual(apiBudget);
       expect(allow429 ? [] : tally.limited, "API calls answered 429").toEqual([]);
