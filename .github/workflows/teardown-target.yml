@@ -91,7 +91,26 @@ jobs:
           terraform init -lockfile=readonly \
             -backend-config="bucket=$STATE_BUCKET" \
             -backend-config="key=$STATE_KEY"
-          terraform destroy -no-color -auto-approve -lock-timeout=2m
+          # timeout sends SIGINT first, so Terraform stops cleanly and releases the state
+          # lock. When GitHub's job timeout killed an apply, the lock stayed and every
+          # later run failed until an admin deleted it (phase F). -k kills it 2 minutes on.
+          timeout -s INT -k 2m 25m terraform destroy -no-color -auto-approve -lock-timeout=2m
+      - name: Name a stale state lock
+        if: failure() && steps.state.outputs.exists == 'true'
+        run: |
+          # A long Terraform run can outlast the sign-in token.
+          curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value > "$RUNNER_TEMP/oidc-token"
+          lock="$LOCK_KEY"
+          if ! n=$(aws s3api list-objects-v2 --bucket "$LOCK_BUCKET" --prefix "$lock" \
+            --query "length(Contents[?Key=='$lock'] || \`[]\`)" --output text); then
+            echo "::warning::Couldn't check for a stale state lock. If the next run fails with 'Error acquiring the state lock', see the runbook's 'A stale state lock'."
+          elif [ "$n" = 1 ]; then
+            echo "::error::Terraform's state lock is still there: s3://$LOCK_BUCKET/$lock. Every later run will fail on it. Once no run is using this state, an admin deletes it (runbook: 'A stale state lock')."
+          fi
+        env:
+          LOCK_BUCKET: ${{ env.STATE_BUCKET }}
+          LOCK_KEY: ${{ env.STATE_KEY }}.tflock
       - name: Sign in again
         if: steps.state.outputs.exists == 'true'
         run: |
