@@ -30,7 +30,7 @@ CI rejects any test file here that uses one of these. A test must be one straigh
 npm run lint            # the frozen lint
 npm run typecheck       # TypeScript, for tests and helpers
 npm run test:helpers    # the helpers' own unit tests
-node helpers/api-calls.ts   # the acceptance tests' API calls in the last run, against the suite's limit
+node helpers/api-calls.ts   # the acceptance tests' API calls in the last run (no suite limit: each test reserves its apiBudget)
 node helpers/contract-coverage.ts <spec-body.md> <test file>...   # every Routes and Page line has a tagged test
 ```
 

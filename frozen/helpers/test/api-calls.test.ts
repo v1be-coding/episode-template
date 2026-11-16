@@ -42,11 +42,11 @@ describe("api calls", () => {
 
   it("calls the count a floor when tests failed", () => {
     const text = describeApiCalls({ firstAttempts: 12, withRetries: 12, failedTests: 3, tests: 4 });
-    assert.match(text, /^API calls by acceptance tests: 12 \(limit 80\)\. 3 of 4 tests failed/);
+    assert.match(text, /^API calls by acceptance tests: 12\. 3 of 4 tests failed/);
   });
 
-  it("says to stop when over the limit", () => {
-    assert.match(describeApiCalls({ firstAttempts: 81, withRetries: 90, failedTests: 0, tests: 9 }), /90 counting retries\. Over the limit/);
-    assert.doesNotMatch(describeApiCalls({ firstAttempts: 80, withRetries: 80, failedTests: 0, tests: 9 }), /Over/);
+  it("has no suite limit, as each test reserves its budget", () => {
+    const text = describeApiCalls({ firstAttempts: 300, withRetries: 310, failedTests: 0, tests: 60 });
+    assert.equal(text, "API calls by acceptance tests: 300, 310 counting retries.");
   });
 });
