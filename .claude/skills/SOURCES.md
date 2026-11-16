@@ -26,4 +26,9 @@ Each file's git blob hash matched upstream's at that commit when copied, so
 | `diagnosing-bugs`                       | Hard failures                               |
 | `codebase-design`, `writing-for-agents` | Used by other skills                        |
 
+`field-reports` is from Anthropic's built-in Claude Code skills, copied unedited on
+2026-11-16 (git blob `170f5400a699e7475b35f2715658df03cedfa420`). It's pinned the
+same way. Use it in the spec phase to learn how a library or technique behaves in
+real use: bugs, workarounds, what helps. Use `research` for documented facts.
+
 `/attempt` and `/acceptance` are this repo's own, in `.claude/commands/`.
