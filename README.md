@@ -4,8 +4,8 @@ Where every V1be Coding episode starts.
 
 ## Sites
 
-- **Production:** https://smoke-test.emilianocasijr.com. Setup changes this line for each episode.
-- **Branch environments:** each ready PR gets its own address, printed as `Branch environment: <url>` in its `branch / deploy` job log.
+- **Production:** none for the template itself. Setup sets this line to the episode's address, such as `https://<subdomain>.emilianocasijr.com`.
+- **Branch environments:** each ready PR in an episode gets its own address, printed as `Branch environment: <url>` in its `branch / deploy` job log. The template's own PRs deploy nothing: they run `rounds`, `checks` and `green` only.
 
 ## Database
 
