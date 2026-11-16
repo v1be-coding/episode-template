@@ -22,7 +22,12 @@ export default defineConfig(
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ["src/{api,db,limits}/**/*.ts", "*.config.{ts,js}", ".claude/**/*.mjs"],
+    files: [
+      "src/{api,db,limits}/**/*.ts",
+      "*.config.{ts,js}",
+      ".claude/**/*.mjs",
+      "scripts/**/*.mjs",
+    ],
     languageOptions: { globals: globals.node },
   },
   // Vitest's asymmetric matchers, such as expect.any(), are typed any.

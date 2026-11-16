@@ -6,7 +6,7 @@ Read by the reviewer agent (`/code-review`), not by the builder. Judgement calls
 
 These already run in the pre-commit hook or CI. Skip anything they catch.
 
-- `npm run lint`: ESLint, plus the frozen-test rules in `frozen/`
+- `npm run lint`: ESLint, the frozen-test rules in `frozen/`, and `scripts/check-aws-calls.mjs` (an AWS CLI call in a workflow that would read a refusal as "none")
 - `npm run format:check`: Prettier
 - `npm run typecheck`: TypeScript
 - `npm test`: Vitest
@@ -30,6 +30,15 @@ Any write may run twice. A write must be an upsert keyed by a client-generated I
 - Good: `tx.insert(orders).values({ id, total }).onConflictDoUpdate({ target: orders.id, ... })` inside `transactionWithRetry`, with `id` from the client
 
 Why: a retried plain insert creates duplicates.
+
+### A refusal isn't "nothing there"
+
+When code reads an AWS call's failure or empty answer as "none" (no environment, no state, nothing to remove), it must tell an access refusal apart from absence, and fail on a refusal. `check-aws-calls.mjs` catches the shell shapes in workflows. This rule covers the rest: SDK calls in `src/` or `frozen/helpers/`, a `catch` that returns an empty list, and a shell shape the check can't see.
+
+- Bad: `catch (e) { return []; }` around a list call; `if aws s3api head-object ...; then`
+- Good: catch only the "not found" error by name and rethrow the rest; `if ! keys=$(aws s3api list-objects-v2 ...); then exit 1; fi`
+
+Why: under the Budgets action's deny-all, both teardowns went green and left resources running (phase F, #64).
 
 ### Seed data is fake
 
