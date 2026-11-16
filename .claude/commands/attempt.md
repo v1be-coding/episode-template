@@ -91,11 +91,12 @@ gh run view "$id" --json conclusion,url
 `sleep` is fine inside this background loop. A café run waits here for the user's `production` approval.
 
 - **If production passes,** comment on the spec issue with the PR, the run and `Attempt <n> landed.` Then report.
-- **If production fails,** open a fix PR from a new branch, `fix-$ARGUMENTS-<n>`, and land it as in steps 3 and 4. It gets its own 5 rounds. A café fix also waits for the user's `production` approval.
+- **If production fails where no code change can reach,** report it instead. Examples: `Error acquiring the state lock`, or AWS refusing CI's role (an explicit deny, such as a Budgets action's AWSDenyAll). Every PR's deploy would hit the same wall, so a fix or revert PR only spends rounds. Comment on the spec issue with the run, the error line and the cause, then stop and report. The user clears it and reruns the deploy.
+- **If production fails on the attempt's code,** open a fix PR from a new branch, `fix-$ARGUMENTS-<n>`, and land it as in steps 3 and 4. It gets its own 5 rounds. A café fix also waits for the user's `production` approval.
 - **If the fix PR runs out of rounds, or the user rejects one of its approvals,** revert: from a new branch, `revert-$ARGUMENTS-<n>`, run `git revert <merge sha>` (a squash merge has one parent) and land that PR the same way. Then:
   1. Reopen the spec and every ticket the attempt closed. GitHub doesn't reopen them on a revert.
   2. Label the merged attempt PR `failed-attempt`, and comment on the spec issue as in [Fail the attempt](#fail-the-attempt), without closing anything.
-- **If the revert PR fails too,** stop and report. That's the one case that needs the user.
+- **If the revert PR fails too,** stop and report.
 
 ## Stop over a frozen test
 
