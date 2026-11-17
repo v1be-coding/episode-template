@@ -118,6 +118,32 @@ data "aws_iam_policy_document" "api" {
     actions   = ["dynamodb:UpdateItem"]
     resources = [aws_dynamodb_table.limits.arn]
   }
+
+  # Claude without a key (src/ai/claude.ts): an STS token only Anthropic accepts,
+  # for at most 5 minutes. The episode's boundary allows this only when the
+  # episode has `anthropic = true` in v1be-infra, so it does nothing elsewhere.
+  statement {
+    actions   = ["sts:GetWebIdentityToken"]
+    resources = ["*"]
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "sts:IdentityTokenAudience"
+      values   = ["https://api.anthropic.com"]
+    }
+
+    condition {
+      test     = "Null"
+      variable = "sts:IdentityTokenAudience"
+      values   = ["false"]
+    }
+
+    condition {
+      test     = "NumericLessThanEquals"
+      variable = "sts:DurationSeconds"
+      values   = ["300"]
+    }
+  }
 }
 
 # Every role CI makes must carry the episode's boundary, or AWS refuses it.
