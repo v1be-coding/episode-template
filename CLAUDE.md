@@ -9,6 +9,7 @@ A V1be Coding episode: one app, built from a spec in one run. The series' rules 
 - **Spec phase:** what a spec must pin down for the frozen tests, and the rule for comments on a spec issue, are in `docs/agents/spec.md`. Read it before grilling or writing a spec.
 - **`.github/workflows/`:** the required chain is in `deploy.yml`. Only the user commits workflows.
 - **Database rules:** `README.md`.
+- **Calling Claude:** `src/ai/claude.ts`, with no API key. Read `docs/calling-claude.md` before writing an AI route.
 
 ## Checks
 

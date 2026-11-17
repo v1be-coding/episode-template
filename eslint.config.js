@@ -23,7 +23,7 @@ export default defineConfig(
   },
   {
     files: [
-      "src/{api,db,limits}/**/*.ts",
+      "src/{ai,api,db,limits}/**/*.ts",
       "*.config.{ts,js}",
       ".claude/**/*.mjs",
       "scripts/**/*.mjs",
