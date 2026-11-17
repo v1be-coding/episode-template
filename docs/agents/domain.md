@@ -6,7 +6,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 - **`GLOSSARY.md`** at the repo root
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
-- **The series' own docs** in [`v1be-coding/series`](https://github.com/v1be-coding/series): its `GLOSSARY.md` and `docs/adr/` hold the decisions every episode shares, such as the stack and the cost guards. Read one with `gh api repos/v1be-coding/series/contents/<path> --jq .content | base64 -d`. This repo's own glossary and ADRs cover only this episode.
+- **The series' own docs** in [`v1be-coding/series`](https://github.com/v1be-coding/series): its `GLOSSARY.md` and `docs/adr/` hold the decisions every episode shares, such as the stack and the cost guards. Read them from a shallow clone of `series` in your scratchpad, as **Other repos** in `CLAUDE.md` says. This repo's own glossary and ADRs cover only this episode.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs`) creates them lazily when terms or decisions actually get resolved.
 
