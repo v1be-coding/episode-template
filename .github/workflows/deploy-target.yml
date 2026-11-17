@@ -165,7 +165,15 @@ jobs:
         env:
           SITE_URL: ${{ vars.SITE_URL }}
         run: |
-          aws s3 sync dist/web "s3://$SITE_BUCKET" --delete --no-progress
+          # Hashed assets first, so new pages never point at files that aren't there yet.
+          # They never change under one name, so browsers keep them for a year.
+          # Everything else, pages included, is checked on every visit.
+          if [ -d dist/web/assets ]; then
+            aws s3 sync dist/web/assets "s3://$SITE_BUCKET/assets" --delete --no-progress \
+              --cache-control "public, max-age=31536000, immutable"
+          fi
+          aws s3 sync dist/web "s3://$SITE_BUCKET" --delete --no-progress --exclude "assets/*" \
+            --cache-control "no-cache"
           if [ "$TARGET" = production ]; then
             host="${SITE_URL#https://}"
             DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[0]=='$host'].Id | [0]" --output text)
