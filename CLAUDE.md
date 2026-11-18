@@ -12,6 +12,18 @@ A V1be Coding episode: one app, built from a spec in one run. The series' rules 
 - **Database rules:** `README.md`.
 - **Calling Claude:** `src/ai/claude.ts`, with no API key. Read `docs/calling-claude.md` before writing an AI route.
 
+## Running commands
+
+Claude Code can only match a plain command to an allow rule, so anything else asks the user, even in auto mode, and the wait counts toward time to green. Subagents follow this too.
+
+- **One plain command per Bash call,** run from the repo or worktree root. No `cd <dir> &&`, no `git -C <dir>`, and no chains of unrelated commands.
+- **No shell loops and no `$(…)`.** Make one call per item instead, such as one `gh issue view <n>` per ticket. Get a value you need, like the time from `date -u +%Y-%m-%dT%H:%M:%SZ`, with its own call, then use it as plain text.
+- **Edit files with the Edit and Write tools,** never with a heredoc, `sed -i`, `node -e` or a script. There's no Python in the container, on purpose.
+- **Read files with the Read tool,** or `cat` on a literal path, never through a variable.
+- **Use a command's plain form,** such as `npm ci` rather than `npm ci --no-audit --no-fund`, so its allow rule matches.
+
+The background `until … sleep 60` loops in `/attempt`'s CI watch are the exception: they're written out in `attempt.md` and run with `run_in_background`.
+
 ## Checks
 
 `npm run lint`, `npm run typecheck`, `npm test` and a secret scan (`npm run secrets`) run in the pre-commit hook and in CI. In `frozen/`, `npm run lint` checks the frozen test rules.
