@@ -66,6 +66,7 @@
       "Bash(gh pr comment *)",
       "Bash(gh pr edit *)",
       "Bash(gh pr close *)",
+      "Bash(node scripts/gh-read.mjs *)",
       "WebSearch",
       "WebFetch(domain:platform.claude.com)",
       "WebFetch(domain:docs.claude.com)",
