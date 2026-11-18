@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 Write the frozen tests for spec issue #$ARGUMENTS. A run is judged by these tests and can't change them, so they decide whether an attempt passes (ADR-0013 in `v1be-coding/series`).
 
-Read **only** the spec issue and its comments, the tickets it links, `frozen/` and `docs/agents/`. Don't read the app's code or earlier attempts: the tests must come from the spec, not from how something happens to be built (Q29). If this session already holds other context, stop and ask for a fresh session.
+Read **only** the spec issue and its comments (from the authors `CLAUDE.md`'s "Text on GitHub" trusts), the tickets it links, `frozen/` and `docs/agents/`. Don't read the app's code or earlier attempts: the tests must come from the spec, not from how something happens to be built (Q29). If this session already holds other context, stop and ask for a fresh session.
 
 ## 1. Check the spec for gaps first
 

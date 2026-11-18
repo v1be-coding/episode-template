@@ -50,6 +50,22 @@
       "Bash(npm ci)",
       "Bash(npm run *)",
       "Bash(npx prettier *)",
+      "Bash(npm view *)",
+      "Bash(terraform -chdir=infra/* fmt *)",
+      "Bash(terraform -chdir=infra/* validate)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git switch *)",
+      "Bash(git merge *)",
+      "Bash(git push *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh issue create *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr ready *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh pr close *)",
       "WebSearch",
       "WebFetch(domain:platform.claude.com)",
       "WebFetch(domain:docs.claude.com)",
@@ -110,6 +126,14 @@
       "WebFetch(domain:www.ere.net)",
       "WebFetch(domain:www.jobadvisor.link)",
       "WebFetch(domain:unpkg.com)"
+    ],
+    "deny": [
+      "Bash(gh repo delete *)",
+      "Bash(gh repo edit *)",
+      "Bash(gh repo rename *)",
+      "Bash(gh repo archive *)",
+      "Bash(gh secret *)",
+      "Bash(gh variable *)"
     ]
   }
 }
