@@ -1,11 +1,13 @@
 // The GitHub reads a run needs that have no gh subcommand, as one allow rule
-// (`Bash(node scripts/gh-read.mjs *)`). An allow rule on `gh api …` can't be made
+// (`Bash(node .claude/bin/gh-read.mjs *)`). An allow rule on `gh api …` can't be made
 // read-only, as its wildcard also matches -X and -f flags. Here every call is a
-// GET with numeric IDs, so no argument can turn it into a write.
+// GET with numeric IDs, so no argument can turn it into a write. It lives under
+// .claude/, a protected path, so auto mode can't approve an edit to it unreviewed
+// (Claude Code docs, "Protected paths" under permission modes).
 //
-//   node scripts/gh-read.mjs job-log <job id>      a CI job's log, even while others wait
-//   node scripts/gh-read.mjs blocked-by <issue>    the issues blocking a ticket
-//   node scripts/gh-read.mjs rate-limit            the core API rate limit
+//   node .claude/bin/gh-read.mjs job-log <job id>      a CI job's log, even while others wait
+//   node .claude/bin/gh-read.mjs blocked-by <issue>    the issues blocking a ticket
+//   node .claude/bin/gh-read.mjs rate-limit            the core API rate limit
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -37,7 +39,7 @@ export function ghArgs(argv) {
   if (read === "rate-limit" && value === undefined)
     return [...get, "rate_limit", "--jq", ".resources.core"];
   throw new Error(
-    "Usage: node scripts/gh-read.mjs job-log <job id> | blocked-by <issue> | rate-limit",
+    "Usage: node .claude/bin/gh-read.mjs job-log <job id> | blocked-by <issue> | rate-limit",
   );
 }
 

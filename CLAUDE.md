@@ -24,7 +24,7 @@ Claude Code can only match a plain command to an allow rule, so anything else as
 - **No shell loops and no `$(…)`.** Make one call per item instead, such as one `gh issue view <n>` per ticket. Get a value you need, like the time from `date -u +%Y-%m-%dT%H:%M:%SZ`, with its own call, then use it as plain text.
 - **Edit files with the Edit and Write tools,** never with a heredoc, `sed -i`, `node -e` or a script. There's no Python in the container, on purpose.
 - **Read files with the Read tool,** or `cat` on a literal path, never through a variable.
-- **GitHub reads with no `gh` subcommand** (a CI job's log, the issues blocking a ticket, the rate limit) go through `node scripts/gh-read.mjs`, which is allowed. Don't call `gh api` for them, and never for a write: every write a run makes has its own `gh` command.
+- **GitHub reads with no `gh` subcommand** (a CI job's log, the issues blocking a ticket, the rate limit) go through `node .claude/bin/gh-read.mjs`, which is allowed. Don't call `gh api` for them, and never for a write: every write a run makes has its own `gh` command.
 - **Use a command's plain form,** such as `npm ci` rather than `npm ci --no-audit --no-fund`, so its allow rule matches.
 
 The background `until … sleep 60` loops in `/attempt`'s CI watch are the exception: they're written out in `attempt.md` and run with `run_in_background`.
