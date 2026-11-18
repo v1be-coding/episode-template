@@ -1,5 +1,6 @@
 import { test as base, expect, type APIRequestContext, type APIResponse, type TestInfo } from "@playwright/test";
-import { API_CALLS_ANNOTATION } from "./api-calls.js";
+import { API_BUDGET_ANNOTATION, API_CALLS_ANNOTATION } from "./api-calls.js";
+import { limitedEntry } from "./cloudflare.js";
 import { EVIDENCE_ATTACHMENT, EvidenceLog } from "./evidence.js";
 import { PACE, callWait, reservationWait } from "./pace.js";
 
@@ -13,6 +14,7 @@ export const DEFAULT_API_BUDGET = 50;
 // One list for the whole run, which works because the config sets workers: 1.
 const sent: number[] = [];
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 
 // Waits until a call fits under PACE in the trailing window, and reports any wait.
 // After a test's reservation, only a test over its own budget ever waits here.
@@ -116,7 +118,7 @@ export const test = base.extend<
             throw error;
           }
           evidence.finished(response.url(), method, response.status(), Date.now() - started, response.headers());
-          if (response.status() === 429) tally.limited.push(response.url());
+          if (response.status() === 429) tally.limited.push(limitedEntry(response.url(), response.headers()["content-type"]));
           return response;
         };
       },
@@ -143,7 +145,7 @@ export const test = base.extend<
     page.on("pageerror", (error) => evidence.pageError(error.message));
     page.on("response", (response) => {
       if (response.status() === 429 && new URL(response.url()).pathname.startsWith("/api/")) {
-        tally.limited.push(response.url());
+        tally.limited.push(limitedEntry(response.url(), response.headers()["content-type"]));
       }
     });
     await use(page);
@@ -156,6 +158,7 @@ export const test = base.extend<
       await use();
       // Read by helpers/api-calls.ts, which totals the suite's calls.
       testInfo.annotations.push({ type: API_CALLS_ANNOTATION, description: String(tally.calls) });
+      testInfo.annotations.push({ type: API_BUDGET_ANNOTATION, description: String(apiBudget) });
       expect(tally.calls, "API calls this test made").toBeLessThanOrEqual(apiBudget);
       expect(allow429 ? [] : tally.limited, "API calls answered 429").toEqual([]);
     },

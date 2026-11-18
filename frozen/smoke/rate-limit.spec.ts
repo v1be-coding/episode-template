@@ -11,6 +11,8 @@ test("going over the per-IP limit gives a handled 429", async ({ unpacedRequest,
   const { response } = await goOverTheLimit(unpacedRequest);
 
   expect(response?.status()).toBe(429);
+  // Cloudflare's block (error 1015) is a 429 too, but not JSON.
+  expect(response?.headers()["content-type"], "a 429 that isn't JSON is Cloudflare's block, not the app's").toContain("application/json");
   // retryAfterSeconds is server-made: proved by bounds (the time left in the
   // 60-second window) and by matching the header (docs/agents/spec.md).
   const retryAfter = Number(response?.headers()["retry-after"]);
