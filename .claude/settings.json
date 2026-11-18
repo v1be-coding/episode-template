@@ -67,6 +67,7 @@
       "Bash(gh pr edit *)",
       "Bash(gh pr close *)",
       "Bash(node .claude/bin/gh-read.mjs *)",
+      "Bash(node .claude/bin/attempt-preflight.mjs *)",
       "WebSearch",
       "WebFetch(domain:platform.claude.com)",
       "WebFetch(domain:docs.claude.com)",
