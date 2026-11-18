@@ -83,9 +83,10 @@ npx playwright install chromium
 npm run lint
 npm run typecheck
 node helpers/contract-coverage.ts "$TMPDIR/spec-body.md" acceptance/<feature>.spec.ts
-BASE_URL=<main's site> npx playwright test --project=acceptance --no-deps --retries=0
+BASE_URL=<main's site> npx playwright test --project=acceptance --no-deps --retries=0 acceptance/<feature>.spec.ts
 ```
 
+- **Run only this spec's test files**, named at the end as above. A local run counts as a branch (`FROZEN_TARGET` unset), so without them it runs every earlier spec's acceptance tests against main's site too, which may be production, calling a real model or using up this IP's limits. If this spec adds its own project in `helpers/projects.ts`, add `--project=<name>` and its file.
 - `contract-coverage.ts` fails if a Routes or Page line has no test tagged with it. Add the missing test; never drop the line. Data and Test ID lines are exempt. Pass every file holding this spec's tests.
 - `npx playwright install chromium` gets the browser version `frozen/`'s Playwright pins. The dev container has the system libraries but no browser, so leave out `--with-deps`.
 - `--no-deps` keeps a smoke failure from skipping the new tests, and `--retries=0` shows each failure once.
