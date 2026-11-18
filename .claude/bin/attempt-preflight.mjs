@@ -21,6 +21,24 @@ export function contractIds(body) {
   ];
 }
 
+// The spec sections a ticket lists under "## Spec sections", as heading paths.
+export function citedSections(ticketBody) {
+  const start = ticketBody.search(/^## Spec sections\s*$/m);
+  if (start === -1) return [];
+  const rest = ticketBody.slice(start).split("\n").slice(1).join("\n");
+  const end = rest.search(/^## /m);
+  const section = end === -1 ? rest : rest.slice(0, end);
+  return [...section.matchAll(/^\s*[-*]\s+`([^`]+)`/gm)].map((m) => m[1].trim());
+}
+
+// A heading path resolves when its last part is a heading line in the spec.
+function hasHeading(body, path) {
+  const last = path.split("›").pop().trim();
+  return body
+    .split("\n")
+    .some((line) => /^#{1,6}\s/.test(line) && line.replace(/^#+\s+/, "").trim() === last);
+}
+
 // Problems that stop the run, and warnings that don't, from what was read.
 export function check({ body, tickets, frozenText, ticketBodies }) {
   const problems = [];
@@ -47,6 +65,19 @@ export function check({ body, tickets, frozenText, ticketBodies }) {
     const missing = ids.filter((id) => !cited.has(id));
     if (missing.length > 0) warnings.push(`No ticket cites ${missing.join(", ")}.`);
   }
+  if (tickets.length > 0 && !/^## Constraints every ticket needs\s*$/m.test(body)) {
+    warnings.push(
+      "The spec has no `## Constraints every ticket needs` section, so implementers may miss cross-cutting rules.",
+    );
+  }
+  tickets.forEach((ticket, i) => {
+    const broken = citedSections(ticketBodies[i] ?? "").filter((path) => !hasHeading(body, path));
+    if (broken.length > 0) {
+      problems.push(
+        `Ticket #${ticket.number} cites spec sections that don't exist: ${broken.join("; ")}.`,
+      );
+    }
+  });
   return { problems, warnings };
 }
 

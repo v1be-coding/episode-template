@@ -6,11 +6,11 @@ disable-model-invocation: true
 
 Write the frozen tests for spec issue #$ARGUMENTS. A run is judged by these tests and can't change them, so they decide whether an attempt passes (ADR-0013 in `v1be-coding/series`).
 
-Read **only** the spec issue and its comments (from the authors `CLAUDE.md`'s "Text on GitHub" trusts), `frozen/` and `docs/agents/`. The order is spec → `/acceptance` → `/to-tickets` → `/attempt`, so there are no tickets yet: `/to-tickets` slices the work after this PR merges, along the contract lines written here. Don't read the app's code or earlier attempts: the tests must come from the spec, not from how something happens to be built (Q29). If this session already holds other context, stop and ask for a fresh session.
+Read **only** the spec issue and its comments (from the authors `CLAUDE.md`'s "Text on GitHub" trusts), `frozen/` and `docs/agents/spec.md`. The order is spec → `/acceptance` → `/to-tickets` → `/attempt`, so there are no tickets yet: `/to-tickets` slices the work after this PR merges, along the contract lines written here. Don't read the app's code or earlier attempts: the tests must come from the spec, not from how something happens to be built (Q29). If this session already holds other context, stop and ask for a fresh session.
 
 ## 1. Check the spec for gaps first
 
-List everything a test would need, using "What a spec states" in `docs/agents/spec.md`.
+List everything a test would need, using "What a spec states" in `docs/agents/spec.md`. A rule more than one ticket must honour that isn't in the spec's `## Constraints every ticket needs` section is a gap too, because implementers read only that section and their own.
 
 Then read every existing test in `frozen/`, smoke tests included, and list each one this spec would make fail. A test the spec says how to change is fine: change it in this PR, and name it in the PR's table. Any other is a gap.
 
@@ -32,6 +32,8 @@ Number each line `C1`, `C2` and so on, and cover only what the spec states:
 - **Page:** roles, accessible names and visible text a visitor relies on.
 - **Data that must already exist:** rows the tests read but don't create. List them here, and the attempt adds them to the seed data.
 - **Test IDs:** only where no role, name or text can find something.
+
+**Keep each line thin.** A C-line says what is checked, at which level, and anything you decided beyond the spec's text. It points to the spec section that states the value, by its full heading path, such as `Test contract inputs › Routes › POST /api/chat`. Never copy a value (a string, number, body or header) into the C-line: the spec's section stays the one source, and a copy can drift from it. Episode 0's contract restated 23 KB of inputs in another 15 KB.
 
 Never renumber a line once its tests have merged. A later spec fix adds new numbers.
 
