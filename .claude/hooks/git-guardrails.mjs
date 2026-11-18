@@ -6,6 +6,22 @@ import { pathToFileURL } from "node:url";
 
 const PROTECTED = "main";
 
+// Returns the index just past the bodies of the heredocs opened on the line
+// before `start`, each ending at a line that is its delimiter.
+function skipHeredocBodies(line, start, heredocs) {
+  let i = start;
+  for (const { delim, dash } of heredocs) {
+    while (i < line.length) {
+      let end = line.indexOf("\n", i);
+      if (end === -1) end = line.length;
+      const text = line.slice(i, end);
+      i = end + 1;
+      if ((dash ? text.replace(/^\t+/, "") : text) === delim) break;
+    }
+  }
+  return Math.min(i, line.length);
+}
+
 // Splits a command line into simple commands, then words, honouring quotes.
 // Each command's `seps` lists the operators that ended it, such as "&&" or ";".
 // Good enough for the commands an agent writes, not a full shell parser.
@@ -15,6 +31,7 @@ export function simpleCommands(line) {
   let word = "";
   let inWord = false;
   let quote = null;
+  let heredocs = [];
   const endWord = () => {
     if (inWord) words.push(word);
     word = "";
@@ -42,8 +59,23 @@ export function simpleCommands(line) {
       word += line[++i];
       inWord = true;
     } else if (/\s/.test(c)) {
-      if (c === "\n") endCommand(";");
-      else endWord();
+      if (c === "\n") {
+        endCommand(";");
+        i = skipHeredocBodies(line, i + 1, heredocs) - 1;
+        heredocs = [];
+      } else endWord();
+    } else if (c === "<" && line[i + 1] === "<" && line[i + 2] !== "<") {
+      // A heredoc: remember its delimiter, so its body isn't read as commands.
+      endWord();
+      const m = /^<<-?[ \t]*(?:'([^']*)'|"([^"]*)"|([^\s;&|()<>]+))/.exec(line.slice(i));
+      if (m) {
+        heredocs.push({ delim: m[1] ?? m[2] ?? m[3], dash: m[0].startsWith("<<-") });
+        i += m[0].length - 1;
+      } else i++;
+    } else if (c === "&" && (/[<>]/.test(line[i - 1] ?? "") || line[i + 1] === ">")) {
+      // Part of a redirect (2>&1, >&2, <&3, &>, &>>), not a separator.
+      word += c;
+      inWord = true;
     } else if ((c === "&" || c === "|") && line[i + 1] === c) {
       endCommand(c + c);
       i++;

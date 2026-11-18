@@ -40,6 +40,9 @@ const blocked = [
   ["git commit -m x || true; git push", "feature"],
   ["git commit -m x & git push", "feature"],
   ["git commit -m x && npm test; gh pr create --fill", "feature"],
+  ["git commit -m x >/dev/null 2>&1; git push origin feature", "feature"],
+  ["git commit -F - <<'EOF'\nmsg\nEOF\ngit push origin feature", "feature"],
+  ["cat <<EOF >msg\nok\nEOF\ngit push origin main", "feature"],
   ["gh pr merge 12", "feature"],
   ["gh pr merge 12 --squash", "feature"],
   ["gh pr merge 12 --admin --squash", "feature"],
@@ -70,6 +73,22 @@ const allowed = [
   ["git commit -m 'never git push --force'", "feature"],
   ["git switch main", "feature"],
   ["git pull --ff-only", "main"],
+  ["git commit -m x >/dev/null 2>&1 && git push origin feature", "feature"],
+  ["git commit -m x >log 2>&1 && gh pr create --fill", "feature"],
+  ["git commit -m x >&2 && git push origin feature", "feature"],
+  ["git commit -m x &>/dev/null && git push origin feature", "feature"],
+  ["git commit -m x &>>log && git push origin feature", "feature"],
+  ["git commit -m x 0<&3 && git push origin feature", "feature"],
+  [
+    "git commit -F - <<'EOF' && git push origin feature\nfix; then git push origin main\nEOF",
+    "feature",
+  ],
+  [
+    "git commit -F - <<-EOF && git push origin feature\n\tgit reset --hard\n\tEOF\ngit log -1",
+    "feature",
+  ],
+  ['git commit -F - <<"EOF" && git push origin feature\nmsg & more\nEOF', "feature"],
+  ["cat <<< 'git push origin main'", "feature"],
 ];
 
 for (const [command, branch] of blocked) {
