@@ -1,8 +1,15 @@
 # Third-party skills
 
 Copied from [mattpocock/skills](https://github.com/mattpocock/skills) at commit
-`4ae2317ddb22b046e26455e4f9c9b3aaaf62212d`, unedited, under its MIT licence in
+`4ae2317ddb22b046e26455e4f9c9b3aaaf62212d`, under its MIT licence in
 [LICENSE](./LICENSE). `pr` also keeps its own [CREDITS.md](./pr/CREDITS.md).
+
+Local edits, which an update must carry over:
+
+- `implement-spec`: single-command implementer setup (template #82).
+- `to-tickets`: the order after `/acceptance`, reading frozen test tags, and the agent slicing rules (#88); each ticket's `## Spec sections` list (this repo's spec slicing change).
+
+The run settings for `implement-spec` live in `/attempt`, not in the skill.
 
 They're pinned on purpose, so every episode runs the same skills and episodes can
 be compared (Q36). Nothing updates them automatically. To update, read the new

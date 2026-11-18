@@ -112,6 +112,10 @@ The end-to-end behaviour this ticket makes work, from the user's perspective, no
 - [ ] Criterion 1
 - [ ] Criterion 2
 
+## Spec sections
+
+- The full heading path of each spec section this ticket needs, such as `Test contract inputs › Visible error states`. Implementers read these and `Constraints every ticket needs`, not the whole spec, so list every section the ticket's criteria and C-lines point to.
+
 ## Blocked by
 
 - A reference to each blocking ticket, or "None (can start immediately)". Omit this section when blockers were set as native edges.

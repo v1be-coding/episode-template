@@ -10,6 +10,7 @@
 - **The page:** the roles, accessible names and visible text a visitor relies on. Where it matters how many times a text appears, say how many.
 - **Data that must already exist:** rows the feature reads but doesn't create.
 - **Terms with more than one meaning:** define them where the spec first uses them. For #42, "the origin check" and "a failed request" each cost `/acceptance` a stop.
+- **Constraints every ticket needs:** one section with that exact heading, `## Constraints every ticket needs`, of at most 3 KB. It holds every rule more than one ticket must honour, such as security headers and the CSP, shared API headers, React or style rules, data that must never appear, logging limits, and terms. State each rule once, there, and have feature sections point to it. Implementers read this section and their ticket's sections, not the whole spec.
 - **What the acceptance tests leave out:** behaviour the spec wants but no frozen test should check, such as a timing or a look, so `/acceptance` doesn't guess at it.
 
 ## Responses the template already makes
@@ -51,3 +52,4 @@ If the feature changes behaviour that an existing frozen test checks, such as th
 
 - Answer a gap by editing the body, with the user's approval. Then comment only to point at the edited text.
 - Anything new, such as a decision, an example or a rule, goes in the body, never only in a comment.
+- After the frozen PR merges, a spec section that a C-line points to changes only through `/acceptance`, which adds a new C-number. The C-lines hold no values of their own, so an edit there changes what the frozen tests mean.
