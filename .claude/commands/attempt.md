@@ -20,7 +20,7 @@ Run this in an interactive session, not `claude -p`: CI waits can outlast a back
 
 ## 1. Start
 
-1. Say back which spec this is: `gh issue view $ARGUMENTS --json title --jq .title`. The argument is the spec's issue number, not an attempt number.
+1. Say back which spec this is: `gh issue view $ARGUMENTS --json title --jq .title`. The argument is the spec's issue number, not an attempt number. Then run `node .claude/bin/attempt-preflight.mjs $ARGUMENTS`. It checks the order spec → `/acceptance` → `/to-tickets` → `/attempt`: the spec has a Test contract, its frozen tests are on `main`, and it has open tickets. If it prints `Not ready`, stop and report what it says. Pass on any `Warning` lines in your report.
 2. Count earlier attempts by branch name:
 
    ```sh

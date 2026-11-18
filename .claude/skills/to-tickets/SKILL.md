@@ -16,6 +16,8 @@ The issue tracker and triage label vocabulary should have been provided to you. 
 
 Work from whatever is already in the conversation context. If the user passes a reference (a spec path, an issue number or URL) as an argument, fetch it and read its full body and comments.
 
+In a V1be Coding episode, this runs after `/acceptance`'s frozen PR has merged: the order is spec → `/acceptance` → `/to-tickets` → `/attempt`. Read the spec's `## Test contract` (the C-lines) and the titles and tags of the tests in `frozen/acceptance/`, not their bodies. A test tagged with two contract lines, such as `@C28` and `@C55`, only passes when both are done, so those lines belong in one ticket, or need an edge between their tickets.
+
 ### 2. Explore the codebase (optional)
 
 If you have not already explored the codebase, do so to understand the current state of the code. Ticket titles and descriptions should use the project's domain glossary vocabulary, and respect ADRs in the area you're touching.
@@ -35,6 +37,19 @@ Break the work into **tracer bullet** tickets.
 
 </vertical-slice-rules>
 
+<agent-slicing-rules>
+
+These come from episode 0's first breakdown, which the user caught before publishing. They apply on top of the rules above.
+
+1. **Size by reliability, not by the context window.** Aim for about 4 behaviours a ticket. A ticket with 8 fits in one context window and still goes wrong more often.
+2. **Tickets that can run at the same time never edit the same file.** Agents build them in parallel worktrees, so shared files (`package.json` and the lock file, build config, the design tokens, the app shell) conflict at merge. Give the shared files to a prefactor ticket that creates them and installs every dependency, or add an edge. This means fewer tickets run in parallel, which is the price.
+3. **Each criterion fails at the ticket's starting commit, and only this ticket can make it pass.** Cite the contract IDs it covers (`C12`, `C13`). Every contract line belongs to exactly one ticket.
+4. **Each ticket owns its checks.** No final "quality sweep" ticket: it finds failures after the tickets that caused them are closed. Only whole-site checks go in a last integrate-and-verify ticket.
+5. **Label every edge as a build gate or a verification gate.** A build gate means the blocked ticket can't be written without the other's code. A verification gate means only a test needs it, such as a real-model check needing the API, while the build can start. A test that stubs the dependency with `page.route` needs neither.
+6. **Name only file paths that already exist,** and point to the spec's sections and research notes rather than copy them. (The rule below about avoiding paths still holds: when a path is worth naming, it must be real.)
+
+</agent-slicing-rules>
+
 Give each ticket its **blocking edges**: the other tickets that must complete before it can start. A ticket with no blockers can start immediately.
 
 **Wide refactors are the exception to vertical slicing.** A **wide refactor** is one mechanical change (rename a column, retype a shared symbol) whose **blast radius** fans across the whole codebase, so a single edit breaks thousands of call sites at once and no vertical slice can land green. Don't force it into a tracer bullet; sequence it as **expand–contract**. First expand: add the new form beside the old so nothing breaks. Then migrate the call sites over in batches sized by blast radius (per package, per directory), each batch its own ticket blocked by the expand, keeping CI green batch to batch because the old form still exists. Finally contract: delete the old form once no caller remains, in a ticket blocked by every migrate batch. When even the batches can't stay green alone, keep the sequence but let them share an integration branch that all block a final integrate-and-verify ticket; green is promised only there.
@@ -44,8 +59,9 @@ Give each ticket its **blocking edges**: the other tickets that must complete be
 Present the proposed breakdown as a numbered list. For each ticket, show:
 
 - **Title**: short descriptive name
-- **Blocked by**: which other tickets (if any) must complete first
+- **Blocked by**: which other tickets (if any) must complete first, each marked build gate or verification gate
 - **What it delivers**: the end-to-end behaviour this ticket makes work
+- **Contract lines**: the C-IDs it owns, and the files it creates or changes that a parallel ticket might also touch
 
 Ask the user:
 
