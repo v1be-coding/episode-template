@@ -210,12 +210,13 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 
   # A ceiling on all traffic together, which no caller can get around (Q55).
-  # The burst matches portfolio's Lambda limit of 10 runs at once, shared by
-  # every episode, so a spike gets a handled 429 here instead of a 503. Raise it
-  # to 20 once AWS raises that limit.
+  # The rate caps cost, so it stays at 10. The burst only lets a short spike
+  # through: 20 at once, now that AWS raised portfolio's Lambda limit from 10 to
+  # 1,000 runs (2026-11-14). At 10 a second and the 10 s timeout, five episodes
+  # peak around 500, well under it.
   default_route_settings {
     throttling_rate_limit  = 10
-    throttling_burst_limit = 10
+    throttling_burst_limit = 20
   }
 }
 

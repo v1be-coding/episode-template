@@ -114,4 +114,4 @@ When a frozen test looks wrong, for example it contradicts the spec or its contr
 
 ## Report
 
-End with a short report for the user: the outcome, links to the PR and the runs, the rounds used, and anything left for them to do. Copy the last run's `API calls by acceptance tests` line from the `verify` job's log. If it's over 60, say the suite is close to the limit.
+End with a short report for the user: the outcome, links to the PR and the runs, the rounds used, and anything left for them to do. Copy the last run's `API calls by acceptance tests` line from the `verify` job's log; the total is a trend, not a limit. Say a test is close to its budget if the line says `Over 80%`, and say the suite is close to its time limit if the `verify` run took over 15 of its 20 minutes.
