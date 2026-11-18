@@ -3,8 +3,10 @@
 # runs the required chain (Q13, Q62):
 #   rounds → checks and cost → cost-approval if over $1 → branch (deploy,
 #   then verify) → checklist → green
-# A PR that changes only frozen/ runs rounds, checks and green. Closing a PR
-# destroys its environment.
+# A PR that changes only frozen/ runs rounds, checks and green. A push to main
+# that changes only frozen/ runs nothing: production's code hasn't changed, and
+# a spec's new smoke tests would fail on a feature not built yet (portfolio-site
+# #8). Closing a PR destroys its environment.
 # episode-template has no site since smoke-test was removed after phase F. While
 # it has no EPISODE variable it runs rounds, checks and green only, and never
 # signs in to AWS. In any other repo a missing EPISODE still fails the deploy.
@@ -13,6 +15,7 @@ name: deploy
 on:
   push:
     branches: [main]
+    paths-ignore: ["frozen/**"]
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, closed]
 
@@ -148,7 +151,7 @@ jobs:
       - name: Install actionlint at a fixed version
         working-directory: ${{ runner.temp }}
         run: |
-          curl -fsSLo actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -o actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           echo "$ACTIONLINT_SHA256  actionlint.tar.gz" | sha256sum -c -
           tar -xzf actionlint.tar.gz actionlint
           echo "$PWD" >> "$GITHUB_PATH"
@@ -159,7 +162,7 @@ jobs:
       - name: Install Betterleaks at a fixed version
         working-directory: ${{ runner.temp }}
         run: |
-          curl -fsSLo betterleaks.tar.gz "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -o betterleaks.tar.gz "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
           echo "$BETTERLEAKS_SHA256  betterleaks.tar.gz" | sha256sum -c -
           tar -xzf betterleaks.tar.gz betterleaks
           echo "$PWD" >> "$GITHUB_PATH"
@@ -236,7 +239,7 @@ jobs:
       - name: Install Infracost at a fixed version
         working-directory: ${{ runner.temp }}
         run: |
-          curl -fsSLo infracost.tar.gz "https://github.com/infracost/infracost/releases/download/v${INFRACOST_VERSION}/infracost-linux-amd64.tar.gz"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -o infracost.tar.gz "https://github.com/infracost/infracost/releases/download/v${INFRACOST_VERSION}/infracost-linux-amd64.tar.gz"
           echo "$INFRACOST_SHA256  infracost.tar.gz" | sha256sum -c -
           tar -xzf infracost.tar.gz infracost-linux-amd64
           mv infracost-linux-amd64 infracost
