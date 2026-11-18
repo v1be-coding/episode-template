@@ -49,4 +49,31 @@ describe("api calls", () => {
     const text = describeApiCalls({ firstAttempts: 300, withRetries: 310, failedTests: 0, tests: 60 });
     assert.equal(text, "API calls by acceptance tests: 300, 310 counting retries.");
   });
+
+  it("names the test closest to its own budget", () => {
+    const withBudget = (calls: number, budget: number) => ({
+      retry: 0,
+      annotations: [
+        { type: "api-calls", description: String(calls) },
+        { type: "api-budget", description: String(budget) },
+      ],
+    });
+    const report = {
+      specs: [
+        { tests: [{ projectName: "acceptance", results: [withBudget(18, 50)] }] },
+        { tests: [{ projectName: "acceptance", results: [withBudget(21, 25)] }] },
+        { tests: [{ projectName: "smoke", results: [withBudget(49, 50)] }] },
+      ],
+    };
+    const calls = countApiCalls(testsFromReport(report));
+    assert.deepEqual(calls.busiest, { calls: 21, budget: 25 });
+    assert.equal(
+      describeApiCalls(calls),
+      "API calls by acceptance tests: 39. Busiest test: 21 of its 25 budget (84%). Over 80%, so that test is close to its apiBudget.",
+    );
+  });
+
+  it("leaves out the busiest test when no budget was recorded", () => {
+    assert.equal(describeApiCalls(countApiCalls(testsFromReport({ specs: [{ tests: [{ projectName: "acceptance", results: [result(3)] }] }] }))), "API calls by acceptance tests: 3.");
+  });
 });

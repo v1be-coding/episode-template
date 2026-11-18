@@ -1,10 +1,11 @@
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 
-// The frozen smoke test's 4th check (Q21, Q59). It sends at a steady 4 a second
-// on a fixed schedule, so any full minute holds 240 requests and always passes
-// the app's 120. That stays under Cloudflare's 50 in 10 seconds and API Gateway's
-// 10 a second, so the 429 that comes back is the app's own.
-export const LIMIT_PROBE = { perSecond: 4, maxRequests: 245 };
+// The frozen smoke test's 4th check (Q21, Q59). It sends at a steady 3 a second
+// on a fixed schedule, so the app's fixed 60-second window passes 120 within
+// about 81 s wherever the probe starts (at most 242 requests). That keeps well
+// under Cloudflare's 50 in 10 seconds, whose counts aren't exact, and API
+// Gateway's 10 a second, so the 429 that comes back is the app's own.
+export const LIMIT_PROBE = { perSecond: 3, maxRequests: 245 };
 
 export async function goOverTheLimit(
   request: APIRequestContext,

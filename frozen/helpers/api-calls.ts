@@ -12,6 +12,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const API_CALLS_ANNOTATION = "api-calls";
+// Each test's apiBudget, so the line can name the test closest to its own budget.
+export const API_BUDGET_ANNOTATION = "api-budget";
 // Smoke tests run before every suite and the rate-limit check waits out its own
 // window, so only the acceptance tests count against the limit.
 export const COUNTED_PROJECT = "acceptance";
@@ -22,22 +24,36 @@ export type CountedTest = {
   failed: boolean; // never passed, so it stopped early
   results: { retry: number; annotations: Annotation[] }[];
 };
-export type ApiCalls = { firstAttempts: number; withRetries: number; failedTests: number; tests: number };
+// The first attempt that used the largest share of its own apiBudget.
+export type Busiest = { calls: number; budget: number };
+export type ApiCalls = { firstAttempts: number; withRetries: number; failedTests: number; tests: number; busiest?: Busiest };
 
 export function countApiCalls(tests: CountedTest[]): ApiCalls {
   const counted = tests.filter((test) => test.project === COUNTED_PROJECT);
-  const callsIn = (result: CountedTest["results"][number]) =>
+  const sumOf = (result: CountedTest["results"][number], type: string) =>
     result.annotations
-      .filter((annotation) => annotation.type === API_CALLS_ANNOTATION)
+      .filter((annotation) => annotation.type === type)
       .reduce((sum, annotation) => sum + Number(annotation.description ?? 0), 0);
+  const callsIn = (result: CountedTest["results"][number]) => sumOf(result, API_CALLS_ANNOTATION);
   const results = counted.flatMap((test) => test.results);
+  const firsts = results.filter((r) => r.retry === 0);
+  let busiest: Busiest | undefined;
+  for (const result of firsts) {
+    const budget = sumOf(result, API_BUDGET_ANNOTATION);
+    const calls = callsIn(result);
+    if (budget > 0 && (!busiest || calls / budget > busiest.calls / busiest.budget)) busiest = { calls, budget };
+  }
   return {
-    firstAttempts: results.filter((r) => r.retry === 0).reduce((sum, r) => sum + callsIn(r), 0),
+    firstAttempts: firsts.reduce((sum, r) => sum + callsIn(r), 0),
     withRetries: results.reduce((sum, r) => sum + callsIn(r), 0),
     failedTests: counted.filter((test) => test.failed).length,
     tests: counted.length,
+    ...(busiest ? { busiest } : {}),
   };
 }
+
+// A test past this share of its apiBudget is worth a look before it fails on it.
+export const BUSY_SHARE = 0.8;
 
 // One line for logs and reports, plus what to make of it.
 export function describeApiCalls(calls: ApiCalls): string {
@@ -46,6 +62,12 @@ export function describeApiCalls(calls: ApiCalls): string {
   const parts = [`API calls by acceptance tests: ${calls.firstAttempts}${retries}.`];
   if (calls.failedTests > 0) {
     parts.push(`${calls.failedTests} of ${calls.tests} tests failed and stopped early, so the real count is higher.`);
+  }
+  if (calls.busiest) {
+    const { calls: used, budget } = calls.busiest;
+    const share = Math.round((used / budget) * 100);
+    const near = used > budget * BUSY_SHARE ? " Over 80%, so that test is close to its apiBudget." : "";
+    parts.push(`Busiest test: ${used} of its ${budget} budget (${share}%).${near}`);
   }
   return parts.join(" ");
 }
