@@ -29,7 +29,7 @@ Run this in an interactive session, not `claude -p`: CI waits can outlast a back
 
    This attempt is that number plus one. At 3 earlier attempts, stop: the series allows no more. Also stop if an `attempt-$ARGUMENTS-*` PR is still open, because another attempt is running.
 
-3. Comment on the spec issue: `Attempt <n> started at <UTC time, ISO 8601>.` The scorecard measures time to green from this comment.
+3. Comment on the spec issue: `Attempt <n> started at <UTC time, ISO 8601>.` The scorecard measures time to green from this comment. Get the time first with its own call, `date -u +%Y-%m-%dT%H:%M:%SZ`, then post the comment as plain text, with no `$(…)` and nothing chained after it.
 4. Start from an up-to-date `main`. The integration branch is `attempt-$ARGUMENTS-<n>`, which must be new: CI counts failed rounds by branch name.
 
 ## 2. Build
@@ -39,6 +39,7 @@ Read `.claude/skills/implement-spec/SKILL.md` and follow it, with spec issue #$A
 - **Open the draft PR in its step 3.** This run asks for one. The PR body closes the spec and every ticket with `Closes #<n>` lines. Its runs fail `green` on purpose and don't count as rounds.
 - **Seams are already confirmed.** The seams named in the tickets and the test contract count as confirmed for `tdd`, so implementers don't ask the user.
 - **No hard resets.** An implementer whose worktree isn't on the integration branch runs `git switch -C <its branch> <integration branch>`. The guardrail blocks `git reset --hard`.
+- **Implementers set up with single commands.** Each brief tells the implementer to run, from its worktree root and one per Bash call: `git switch -C <its branch> <integration branch>`, then `npm ci`, then `gh issue view <ticket>`. Never chain them, `cd` first or use `git -C`: Claude Code's worktree guard refuses those, which cost about 30 refused commands in `portfolio-site`'s first attempt. Files are edited with Edit and Write only, as `CLAUDE.md`'s "Running commands" says.
 - **`code-review`'s fixed point is `main`, and so are its standards.** Give the Standards sub-agent `main`'s copy of each standards file, from `git show origin/main:<file>`, not the checkout's. A run's own changes to those files don't count in its review.
 - If the spec lists seed rows in its test contract, add them to `src/db/seed-data.ts`.
 
