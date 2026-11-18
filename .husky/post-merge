@@ -1,0 +1,3 @@
+# After a merge or pull that changed the lock file, reinstall, so the next
+# pre-commit typecheck doesn't fail on a dependency another branch added.
+git diff --quiet ORIG_HEAD HEAD -- package-lock.json || npm ci
