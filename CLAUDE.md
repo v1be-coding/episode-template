@@ -26,8 +26,7 @@ Claude Code can only match a plain command to an allow rule, so anything else as
 - **Read files with the Read tool,** or `cat` on a literal path, never through a variable.
 - **GitHub reads with no `gh` subcommand** (a CI job's log, the issues blocking a ticket, the rate limit) go through `node .claude/bin/gh-read.mjs`, which is allowed. Don't call `gh api` for them, and never for a write: every write a run makes has its own `gh` command.
 - **Use a command's plain form,** such as `npm ci` rather than `npm ci --no-audit --no-fund`, so its allow rule matches.
-
-The background `until … sleep 60` loops in `/attempt`'s CI watch are the exception: they're written out in `attempt.md` and run with `run_in_background`.
+- **Wait on CI with `node .claude/bin/ci-watch.mjs`,** which is allowed, run with `run_in_background`. Never write a `sleep` or `until` loop. See `/attempt` step 4.
 
 ## Checks
 
