@@ -52,20 +52,17 @@ Read `.claude/skills/implement-spec/SKILL.md` and follow it, with spec issue #$A
 
 ## 4. Watch CI and fix it
 
-Watch the newest run for the PR's head commit, not `gh pr checks --watch`, which exits on an older draft run's failure. Wait with Bash's `run_in_background`, which tells you when the command exits. First wait for `branch / deploy`:
+Watch the newest run for the PR's head commit, not `gh pr checks --watch`, which exits on an older draft run's failure. Wait with `.claude/bin/ci-watch.mjs`, run with Bash's `run_in_background`, which tells you when the command exits. It polls once a minute and prints the run's URL and jobs at the end. First wait for `branch / deploy`:
 
 ```sh
-sha=$(gh pr view <pr> --json headRefOid --jq .headRefOid)
-until id=$(gh run list --workflow deploy.yml --commit "$sha" --event pull_request --json databaseId --jq '.[0].databaseId // empty') && [ -n "$id" ]; do sleep 60; done
-until gh run view "$id" --json status,jobs --jq '.status == "completed" or any(.jobs[]; .name == "branch / deploy" and .status == "completed")' | grep -q true; do sleep 60; done
-gh run view "$id" --json status,conclusion,jobs --jq '{status, conclusion, jobs: [.jobs[] | {name, conclusion}]}'
+node .claude/bin/ci-watch.mjs branch-deploy <pr>
 ```
 
-If `branch / deploy` passed, post the checklist comment below, since `checklist` waits for the user and the user needs it. Then wait for the whole run with `until [ "$(gh run view "$id" --json status --jq .status)" = completed ]; do sleep 60; done`. After every push, start again from the new head commit.
+If `branch / deploy` passed, post the checklist comment below, since `checklist` waits for the user and the user needs it. Then wait for the whole run with `node .claude/bin/ci-watch.mjs run <pr>`. After every push, start again from the new head commit. The script exits 3 when the PR's head moves, so a watch never reports an old run as the new one.
 
-Don't use `gh run watch`, which this container's `gh` refuses, or the Monitor tool, whose watches end within 30 minutes. Never use a foreground `sleep`.
+Don't use `gh run watch`, which this container's `gh` refuses, the Monitor tool, whose watches end within 30 minutes, or a `sleep` loop of your own, which asks the user.
 
-- **A run with no jobs:** if the run is still `queued` with no jobs after 15 minutes, GitHub stranded it, as in its Actions outages. Push an empty commit that says why.
+- **A run with no jobs:** if the run is still `queued` with no jobs after 15 minutes, GitHub stranded it, as in its Actions outages. `ci-watch.mjs` exits 4 and says so. Push an empty commit that says why.
 - **"Rate limit exceeded":** Claude Code's warning has been wrong every time so far. Run `node .claude/bin/gh-read.mjs rate-limit` before acting on it, and treat only a real `gh` error as a limit.
 - **The checklist comment:** once the first `branch / deploy` job passes, comment on the PR once. The URL stays the same for later pushes.
   - The branch URL, from the line `Branch environment: <url>` in that job's log.
@@ -82,16 +79,13 @@ Don't use `gh run watch`, which this container's `gh` refuses, or the Monitor to
 
 ## 5. Watch production
 
-After the merge, wait in the background for the `deploy.yml` run on the merge commit:
+After the merge, wait in the background (`run_in_background`) for the `deploy.yml` run on the merge commit:
 
 ```sh
-sha=$(gh pr view <pr> --json mergeCommit --jq .mergeCommit.oid)
-until id=$(gh run list --workflow deploy.yml --commit "$sha" --event push --json databaseId --jq '.[0].databaseId // empty') && [ -n "$id" ]; do sleep 60; done
-until [ "$(gh run view "$id" --json status --jq .status)" = completed ]; do sleep 60; done
-gh run view "$id" --json conclusion,url
+node .claude/bin/ci-watch.mjs production <pr>
 ```
 
-`sleep` is fine inside this background loop. A café run waits here for the user's `production` approval.
+A café run waits here for the user's `production` approval.
 
 - **If production passes,** comment on the spec issue with the PR, the run and `Attempt <n> landed.` Then report.
 - **If production fails where no code change can reach,** report it instead. Examples: `Error acquiring the state lock`, or AWS refusing CI's role (an explicit deny, such as a Budgets action's AWSDenyAll). Every PR's deploy would hit the same wall, so a fix or revert PR only spends rounds. Comment on the spec issue with the run, the error line and the cause, then stop and report. The user clears it and reruns the deploy.
