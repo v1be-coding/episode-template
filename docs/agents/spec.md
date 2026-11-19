@@ -2,6 +2,8 @@
 
 `/acceptance` writes the frozen tests from the spec issue alone, and a run is judged by them. Anything the spec leaves open, `/acceptance` must stop and ask about, or worse, decide. So while grilling and writing a spec, pin each item below down in the spec issue's body.
 
+**Read `docs/agents/setup-notes.md` first, if it exists.** Setup writes it with what this episode's infra can and can't do, and anything else the spec must honour. Each note is a constraint on the spec, unless the user says otherwise. No file means Setup had nothing to add.
+
 ## What a spec states
 
 - **Every route:** method, path, request shape, and the exact response for each case: success, each error, and each status code. List every field a response holds, error bodies included. The tests compare whole bodies, so any other field fails them.
