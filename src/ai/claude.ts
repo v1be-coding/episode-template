@@ -110,8 +110,11 @@ export async function createClaude(deps: ClaudeDeps = {}): Promise<Anthropic> {
 
 let shared: Promise<Anthropic> | undefined;
 
-// One client per Lambda container. A failed setup isn't kept, so the next
-// request tries again.
+/**
+ * One client per Lambda container. A failed setup isn't kept, so the next
+ * request tries again. Unused in the template; an episode's AI routes call it.
+ * @public
+ */
 export function claude(): Promise<Anthropic> {
   shared ??= createClaude().catch((error: unknown) => {
     shared = undefined;
