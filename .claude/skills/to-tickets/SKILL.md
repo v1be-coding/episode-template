@@ -109,8 +109,8 @@ The end-to-end behaviour this ticket makes work, from the user's perspective, no
 
 ## Acceptance criteria
 
-- [ ] Criterion 1
-- [ ] Criterion 2
+- [ ] C12, C13: the contract lines this ticket owns, by ID. Don't reword them: the spec's Test contract is the one wording.
+- [ ] Any check beyond the contract, such as a unit test, one line each
 
 ## Spec sections
 
