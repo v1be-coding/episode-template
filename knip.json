@@ -1,7 +1,13 @@
 {
   "$schema": "https://unpkg.com/knip@6.44.1/schema.json",
   "entry": ["scripts/*.mjs", ".claude/bin/*.mjs", ".claude/skills/*/scripts/*.mjs"],
-  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.mjs", ".claude/**/*.mjs", "*.{ts,js}"],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "scripts/**/*.mjs",
+    ".claude/**/*.mjs",
+    "!.claude/worktrees/**",
+    "*.{ts,js}"
+  ],
   "ignoreDependencies": [
     "@secretlint/secretlint-rule-pattern",
     "@secretlint/secretlint-rule-preset-recommend"

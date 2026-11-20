@@ -75,11 +75,16 @@ resource "aws_cloudfront_distribution" "site" {
       value = var.api_origin_secret
     }
 
+    # The API runs in one region, far from many edges. With the default 5-second
+    # keep-alive, an edge's origin connections close between a sender's calls, and
+    # each reopened one costs two extra round trips to the origin (about 440 ms
+    # from US edges). 60 seconds is the most CloudFront allows without a quota raise.
     custom_origin_config {
-      http_port              = 80
-      https_port             = 443
-      origin_protocol_policy = "https-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
+      http_port                = 80
+      https_port               = 443
+      origin_protocol_policy   = "https-only"
+      origin_ssl_protocols     = ["TLSv1.2"]
+      origin_keepalive_timeout = 60
     }
   }
 

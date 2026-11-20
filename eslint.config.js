@@ -7,7 +7,9 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig(
-  globalIgnores(["dist/", "frozen/", "infra/", "drizzle/", "coverage/"]),
+  // Flat config doesn't read .gitignore. Subagent worktrees are full repo copies,
+  // and linting them ran ESLint out of memory in episode 1.
+  globalIgnores(["dist/", "frozen/", "infra/", "drizzle/", "coverage/", ".claude/worktrees/"]),
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {
