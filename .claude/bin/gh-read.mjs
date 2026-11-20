@@ -3,7 +3,10 @@
 // read-only, as its wildcard also matches -X and -f flags. Here every call is a
 // GET with numeric IDs, so no argument can turn it into a write. It lives under
 // .claude/, a protected path, so auto mode can't approve an edit to it unreviewed
-// (Claude Code docs, "Protected paths" under permission modes).
+// (Claude Code docs, "Protected paths" under permission modes). It also sets
+// V1BE_GH_READ_ONLY=1, and the container's gh wrapper then signs in with a token
+// that can only read Actions and Issues (v1be-infra #69). So even a flaw here
+// can't write.
 //
 //   node .claude/bin/gh-read.mjs job-log <job id>      a CI job's log, even while others wait
 //   node .claude/bin/gh-read.mjs blocked-by <issue>    the issues blocking a ticket
@@ -16,6 +19,9 @@ const id = (value, what) => {
     throw new Error(`${what} must be a number, not "${value ?? ""}".`);
   return value;
 };
+
+// gh's environment: the caller's, asking the wrapper for the read-only token.
+export const readOnlyEnv = (env) => ({ ...env, V1BE_GH_READ_ONLY: "1" });
 
 // Returns gh's arguments for a request, or throws on anything else.
 // {owner}/{repo} is filled in by gh from the checkout's remote.
@@ -52,7 +58,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     process.exit(2);
   }
   try {
-    execFileSync("gh", args, { stdio: "inherit" });
+    execFileSync("gh", args, { stdio: "inherit", env: readOnlyEnv(process.env) });
   } catch (error) {
     process.exit(error.status ?? 1);
   }
