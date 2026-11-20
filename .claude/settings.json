@@ -19,6 +19,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-edited.mjs\""
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -69,6 +80,7 @@
       "Bash(node .claude/bin/gh-read.mjs *)",
       "Bash(node .claude/bin/attempt-preflight.mjs *)",
       "Bash(node .claude/bin/ci-watch.mjs *)",
+      "Bash(node .claude/bin/time-requests.mjs *)",
       "WebSearch",
       "WebFetch(domain:platform.claude.com)",
       "WebFetch(domain:docs.claude.com)",
