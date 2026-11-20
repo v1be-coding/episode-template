@@ -20,16 +20,8 @@ Run this in an interactive session, not `claude -p`: CI waits can outlast a back
 
 ## 1. Start
 
-1. Say back which spec this is: `gh issue view $ARGUMENTS --json title --jq .title`. The argument is the spec's issue number, not an attempt number. Then run `node .claude/bin/attempt-preflight.mjs $ARGUMENTS`. It checks the order spec → `/acceptance` → `/to-tickets` → `/attempt`: the spec has a Test contract, its frozen tests are on `main`, and it has open tickets. If it prints `Not ready`, stop and report what it says. Pass on any `Warning` lines in your report.
-2. Count earlier attempts by branch name:
-
-   ```sh
-   gh pr list --state all --label failed-attempt --json headRefName \
-     --jq '[.[] | select(.headRefName | test("^attempt-$ARGUMENTS-[0-9]+$"))] | length'
-   ```
-
-   This attempt is that number plus one. At 3 earlier attempts, stop: the series allows no more. Also stop if an `attempt-$ARGUMENTS-*` PR is still open, because another attempt is running.
-
+1. Say back which spec this is: `gh issue view $ARGUMENTS --json title --jq .title`. The argument is the spec's issue number, not an attempt number. Then run `node .claude/bin/attempt-preflight.mjs $ARGUMENTS`. It checks the order spec → `/acceptance` → `/to-tickets` → `/attempt`: the spec has a Test contract, its frozen tests are on `main`, and it has open tickets. It also checks no other attempt is running and fewer than 3 have failed, the series' limit. If it prints `Not ready`, stop and report what it says. Pass on any `Warning` lines in your report.
+2. Its `Ready` line gives this attempt's number, `<n>`, and its branch. Don't count attempts yourself.
 3. Comment on the spec issue: `Attempt <n> started at <UTC time, ISO 8601>.` The scorecard measures time to green from this comment. Get the time first with its own call, `date -u +%Y-%m-%dT%H:%M:%SZ`, then post the comment as plain text, with no `$(…)` and nothing chained after it.
 4. Start from an up-to-date `main`. The integration branch is `attempt-$ARGUMENTS-<n>`, which must be new: CI counts failed rounds by branch name.
 
@@ -66,9 +58,10 @@ Don't use `gh run watch`, which this container's `gh` refuses, the Monitor tool,
 - **"Rate limit exceeded":** Claude Code's warning has been wrong every time so far. Run `node .claude/bin/gh-read.mjs rate-limit` before acting on it, and treat only a real `gh` error as a limit.
 - **The checklist comment:** once the first `branch / deploy` job passes, comment on the PR once. The URL stays the same for later pushes.
   - The branch URL, from the line `Branch environment: <url>` in that job's log.
-  - The spec's product checklist, copied as a task list.
+  - The spec's `## Product checklist`, copied as a task list. If the spec has none, build one from its Page section and user stories, and say so in the comment.
   - `Try your own values, not the ones in the tests.`
 - **Logs:** `node .claude/bin/gh-read.mjs job-log <job id>`. `gh run view --log` returns nothing while any job is still waiting, such as `checklist`.
+- **A test failing on time:** measure the branch environment with `node .claude/bin/time-requests.mjs <pr> <path>`, adding `--count`, `--method POST`, `--header` and `--body` as needed. It prints connect, first-byte and total time per request over one reused connection. Don't use `curl`, which asks the user.
 - **Frozen test failures:** the PR comment starting `<!-- frozen-retry-report -->` lists each failed or retried test with a hint. The hint is a lead, not a verdict.
 - **Too many API calls:** each frozen test reserves its `apiBudget` before it starts, and fails if it makes more calls than that. A `pace-looking` hint, or the failure `API calls this test made`, means a test went over. Check where the calls come from. If the page makes more calls than it needs, fix the app. If the test's own steps need more than its budget, no change to the app can pass it: [stop over a frozen test](#stop-over-a-frozen-test) now, and don't spend rounds on it.
 - **One push per failed run.** Runs don't cancel each other, so every run that fails counts as a round, including one still going when you push. Read every failure in the run, fix them together, then push once. You can't rerun a job, so a temporary failure also needs a push, such as an empty commit that says why.

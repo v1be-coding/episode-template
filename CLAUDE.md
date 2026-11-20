@@ -26,6 +26,8 @@ Claude Code can only match a plain command to an allow rule, so anything else as
 - **Read files with the Read tool,** or `cat` on a literal path, never through a variable.
 - **GitHub reads with no `gh` subcommand** (a CI job's log, the issues blocking a ticket, the rate limit) go through `node .claude/bin/gh-read.mjs`, which is allowed. Don't call `gh api` for them, and never for a write: every write a run makes has its own `gh` command.
 - **Use a command's plain form,** such as `npm ci` rather than `npm ci --no-audit --no-fund`, so its allow rule matches.
+- **PR, issue and comment bodies go in a file.** Write the body with the Write tool, then pass `--body-file <path>`. An inline `--body` with a heredoc or `$(…)` asks the user, even for an allowed `gh pr create`.
+- **`--jq` takes a single field only,** such as `--jq .title`. An expression with `{`, `[` or `|` asks the user. Use `--json` fields alone and read the JSON, or `gh pr checks` for a PR's checks.
 - **Wait on CI with `node .claude/bin/ci-watch.mjs`,** which is allowed, run with `run_in_background`. Never write a `sleep` or `until` loop. See `/attempt` step 4.
 
 ## Checks

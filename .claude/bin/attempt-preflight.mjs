@@ -1,6 +1,7 @@
 // Checks a spec is ready for /attempt before the run starts: the frozen tests
-// are merged, and the tickets exist. The order is spec → /acceptance →
-// /to-tickets → /attempt. Reads only. Exits 1 with every problem listed.
+// are merged, the tickets exist, and an attempt is allowed. The order is spec →
+// /acceptance → /to-tickets → /attempt. Prints this attempt's number. Reads
+// only. Exits 1 with every problem listed.
 //
 //   node .claude/bin/attempt-preflight.mjs <spec issue number>
 import { execFileSync } from "node:child_process";
@@ -8,6 +9,27 @@ import { pathToFileURL } from "node:url";
 
 const CONTRACT_HEADING = /^## Test contract\s*$/m;
 const CONTRACT_ID = /\bC([1-9][0-9]*)\b/g;
+const MAX_FAILED_ATTEMPTS = 3;
+
+// This attempt's number from the repo's PRs: earlier attempts are PRs on
+// attempt-<spec>-<n> labelled failed-attempt. Another attempt's open PR, or the
+// series' limit of failed attempts, stops the run.
+export function attempt(spec, prs) {
+  const branch = new RegExp(`^attempt-${spec}-[0-9]+$`);
+  const ours = prs.filter((pr) => branch.test(pr.headRefName));
+  const failed = ours.filter((pr) => pr.labels.some((l) => l.name === "failed-attempt")).length;
+  const problems = [];
+  const running = ours.filter((pr) => pr.state === "OPEN");
+  if (running.length > 0) {
+    problems.push(
+      `Another attempt is running: PR #${running[0].number} (${running[0].headRefName}) is open.`,
+    );
+  }
+  if (failed >= MAX_FAILED_ATTEMPTS) {
+    problems.push(`${failed} attempts have failed, and the series allows no more.`);
+  }
+  return { number: failed + 1, problems };
+}
 
 // The C-line IDs in the spec's "## Test contract" section, in order.
 export function contractIds(body) {
@@ -40,8 +62,8 @@ function hasHeading(body, path) {
 }
 
 // Problems that stop the run, and warnings that don't, from what was read.
-export function check({ body, tickets, frozenText, ticketBodies }) {
-  const problems = [];
+export function check({ spec, body, tickets, frozenText, ticketBodies, prs }) {
+  const { number, problems } = attempt(spec, prs);
   const warnings = [];
   const ids = contractIds(body);
   if (ids === null || ids.length === 0) {
@@ -78,7 +100,7 @@ export function check({ body, tickets, frozenText, ticketBodies }) {
       );
     }
   });
-  return { problems, warnings };
+  return { number, problems, warnings };
 }
 
 const run = (cmd, args) =>
@@ -109,14 +131,35 @@ function main() {
   const ticketBodies = tickets.map(
     (t) => JSON.parse(run("gh", ["issue", "view", String(t.number), "--json", "body"])).body ?? "",
   );
-  const { problems, warnings } = check({ body, tickets, frozenText, ticketBodies });
+  const prs = JSON.parse(
+    run("gh", [
+      "pr",
+      "list",
+      "--state",
+      "all",
+      "--limit",
+      "1000",
+      "--json",
+      "number,headRefName,state,labels",
+    ]),
+  );
+  const { number, problems, warnings } = check({
+    spec,
+    body,
+    tickets,
+    frozenText,
+    ticketBodies,
+    prs,
+  });
   for (const w of warnings) process.stdout.write(`Warning: ${w}\n`);
   if (problems.length > 0) {
     for (const p of problems) process.stderr.write(`Not ready: ${p}\n`);
     process.exit(1);
   }
   const open = tickets.filter((t) => t.state === "open").length;
-  process.stdout.write(`Ready: ${open} open tickets, and the frozen tests are on origin/main.\n`);
+  process.stdout.write(
+    `Ready: attempt ${number}, branch attempt-${spec}-${number}. ${open} open tickets, and the frozen tests are on origin/main.\n`,
+  );
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

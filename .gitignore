@@ -5,3 +5,4 @@ dist/
 *.tfstate.*
 *.tfvars
 test-results/
+.claude/worktrees/
