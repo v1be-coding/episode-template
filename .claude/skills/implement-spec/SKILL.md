@@ -29,6 +29,7 @@ Communication to and from subagents should be sparse. Communicate primarily thro
 4. Use a fresh **implementer subagent** for each ticket, each in its own worktree on its own branch. Each implementer subagent:
    - confirms its worktree is based on the integration branch before starting, and resets onto it if not;
    - runs git and setup as plain single commands from its worktree root, one per call, such as `git switch -C <branch> <integration branch>` and then `npm ci`, never chained, after `cd`, or with `git -C`, and edits files with Edit and Write only;
+   - never runs a script that writes to a real service, such as `keys:add` writing keys to SSM, and checks such a script with its unit tests only (auto mode refused one in episode 1);
    - calls the Skill tool with `tdd` to build the ticket;
    - merges the integration branch tip into its own branch before reporting done
 

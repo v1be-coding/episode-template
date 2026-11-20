@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   approvalWaitMs,
+  approvalWaitsByJob,
   attemptOfBranch,
   attemptStarts,
   attemptTally,
@@ -69,6 +70,20 @@ test("#33's run: the checklist wait matches its created-to-completed span", () =
   const jobs = [job("checklist", "2026-11-11T08:08:09Z", "2026-11-11T08:24:39Z")];
   const wait = approvalWaitMs(jobs, t("2026-11-11T07:59:09Z"), t("2026-11-11T08:24:44Z"));
   assert.equal(wait, (16 * 60 + 30) * 1000);
+});
+
+test("names each approval wait, longest first, and leaves out ones with none", () => {
+  const jobs = [
+    job("cost-approval", "2026-11-12T01:00:00Z", "2026-11-12T01:10:00Z"),
+    job("checklist", "2026-11-12T02:00:00Z", "2026-11-12T03:00:00Z"),
+    job("checklist", "2026-11-12T04:00:00Z", "2026-11-12T04:05:00Z", "skipped"),
+    job("green", "2026-11-12T03:00:00Z", "2026-11-12T03:01:00Z"),
+  ];
+  assert.deepEqual(approvalWaitsByJob(jobs, t("2026-11-12T00:00:00Z"), t("2026-11-12T05:00:00Z")), [
+    `checklist ${formatDuration(60 * 60_000)}`,
+    `cost-approval ${formatDuration(10 * 60_000)}`,
+  ]);
+  assert.deepEqual(approvalWaitsByJob([], 0, 1), []);
 });
 
 test("finds when green passed, and null when it didn't", () => {
