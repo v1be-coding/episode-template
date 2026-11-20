@@ -17,7 +17,7 @@ It reads GitHub only and prints Markdown. What it measures:
 
 | Measure                           | From                                                                                                                                                                   |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Time to green                     | The `Attempt <n> started at` comment `/attempt` posts on the spec, to `green` passing on the landed PR, minus time `checklist` and `cost-approval` waited for the user |
+| Time to green                     | The `Attempt <n> started at` comment `/attempt` posts on the spec, to `green` passing on the landed PR, minus time `checklist` and `cost-approval` waited for the user, each named with its wait |
 | Attempts | PRs from `attempt-<spec>-<n>` branches labelled `failed-attempt`, plus one if an attempt landed. A merged attempt that was later reverted carries the label, so it counts as failed |
 | Frozen tests passing on attempt 1 | The first CI run of attempt 1. A test that passed on retry counts (Q40)                                                                                                |
 | Grid | Every attempt run's `frozen-reports` artifact, kept 90 days, and production's run after the merge. Fix PRs after a production failure aren't shown. Run the scorecard within those 90 days |
@@ -31,7 +31,7 @@ The grid shows each frozen test's outcome in each run. The counts under it are l
 - **Retries or failures bunched in one run** point to infrastructure, such as a cold start or a throttle.
 - **One test retried or failing across runs** points to the app or the test.
 
-Open the run's retry report (the PR comment starting `<!-- frozen-retry-report -->`, or `retry-report.md` in the artifact) before calling either. Each test in it carries a hint (`infra-looking`, `app-looking` or `unclear`) and the evidence behind it.
+Open the run's retry report (the PR comment starting `<!-- frozen-retry-report -->` that names the run's ID, or `retry-report.md` in the artifact) before calling either. Each test in it carries a hint (`infra-looking`, `app-looking` or `unclear`) and the evidence behind it.
 
 ## 3. Add the judgment items
 

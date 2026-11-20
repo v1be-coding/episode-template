@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   approvalWaitMs,
+  approvalWaitsByJob,
   attemptOfBranch,
   attemptStarts,
   attemptTally,
@@ -103,7 +104,10 @@ try {
       const green = greens.length ? Math.max(...greens) : null;
       if (start && green) {
         const waited = approvalWaitMs(jobs, start, green);
-        timeToGreen = `${formatDuration(green - start - waited)} (${formatDuration(green - start)} minus ${formatDuration(waited)} waiting for approvals)`;
+        // Named, so a reader sees which waits came off (episode 1's retro).
+        const named = approvalWaitsByJob(jobs, start, green);
+        const which = named.length ? `: ${named.join(", ")}` : "";
+        timeToGreen = `${formatDuration(green - start - waited)} (${formatDuration(green - start)} minus ${formatDuration(waited)} waiting for approvals${which})`;
       } else if (!start) {
         timeToGreen = `Unknown: no "Attempt ${attempt} started at" comment on #${spec}.`;
       }

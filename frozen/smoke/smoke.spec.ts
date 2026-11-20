@@ -12,6 +12,17 @@ test("the API answers through the page", async ({ page }) => {
   await expect(page.getByText("API: ok")).toBeVisible();
 });
 
+// The edge maps only S3's 403 to the 404 page, so the API's own JSON 404
+// reaches the client (v1be-infra #61). A pages = true episode adds the same
+// check for an unknown page, which returns 404 as text/html.
+test("an unknown API path returns the API's JSON 404", async ({ request }) => {
+  const response = await request.get(`/api/no-such-path-${crypto.randomUUID()}`);
+
+  expect(response.status()).toBe(404);
+  expect(response.headers()["content-type"]).toContain("application/json");
+  expect(await response.json()).toEqual({ error: "Not found" });
+});
+
 test("a write and a read reach the database", async ({ request }) => {
   const id = crypto.randomUUID();
   const note = { data: { text: "smoke test" } };

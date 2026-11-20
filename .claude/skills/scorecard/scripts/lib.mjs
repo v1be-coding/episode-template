@@ -45,6 +45,15 @@ export function approvalWaitMs(jobs, from, to) {
   return total;
 }
 
+/** Each approval job's own wait in the window, as "checklist 16m", longest first. */
+export function approvalWaitsByJob(jobs, from, to) {
+  return [...APPROVAL_JOBS]
+    .map((name) => ({ name, ms: approvalWaitMs(jobs.filter((j) => j.name === name), from, to) }))
+    .filter(({ ms }) => ms > 0)
+    .sort((a, b) => b.ms - a.ms)
+    .map(({ name, ms }) => `${name} ${formatDuration(ms)}`);
+}
+
 /** When `green` passed in a run, or null. */
 export function greenAt(jobs) {
   const green = jobs.find((j) => j.name === "green" && j.conclusion === "success");
