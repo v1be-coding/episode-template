@@ -5,7 +5,7 @@ disable-model-invocation: true
 argument-hint: <spec issue number>
 ---
 
-Build the scorecard for spec issue #$ARGUMENTS. The series publishes it on the episode's page, so every number must come from GitHub or from the user, never from memory or estimates (Q28 in the series' decisions, and `V1BE_CODING.md`: Scorecard).
+Build the scorecard for spec issue #$ARGUMENTS. The series publishes it on the episode's page, so every number must come from GitHub or from the user, never from memory or estimates (Q28 in the series' `docs/decisions.md`, and `V1BE_CODING.md`: Scorecard).
 
 ## 1. Run the script
 
