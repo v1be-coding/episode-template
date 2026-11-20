@@ -75,30 +75,29 @@ jobs:
           path: frozen/test-results/
           retention-days: 7
           if-no-files-found: ignore
-      # One comment per PR, updated in place. It appears once a test is retried or
-      # fails, and later runs keep it current.
+      # A new comment for each run, headed by its run ID, so every run's report
+      # stays on the PR for the scorecard and the retro. The first appears once a
+      # test is retried or fails; after that, every run posts one, clean or not.
       - name: Comment on the PR
         if: always() && inputs.branch_environment && hashFiles('frozen/reports/retry-report.json') != ''
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           marker='<!-- frozen-retry-report -->'
-          existing=$(gh api --paginate "repos/$GH_REPO/issues/$PR/comments" \
+          earlier=$(gh api --paginate "repos/$GH_REPO/issues/$PR/comments" \
             --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
           count=$(jq '.flaky + .failed' frozen/reports/retry-report.json)
-          if [ "$count" -eq 0 ] && [ -z "$existing" ]; then exit 0; fi
+          if [ "$count" -eq 0 ] && [ -z "$earlier" ]; then exit 0; fi
           {
             echo "$marker"
-            cat frozen/reports/retry-report.md
+            echo "**Run [$RUN_ID]($RUN_URL)** (try $RUN_ATTEMPT), on commit ${SHA:0:7}."
             echo
-            echo "From [this run]($RUN_URL), on commit ${SHA:0:7}."
+            cat frozen/reports/retry-report.md
           } > comment.md
-          if [ -n "$existing" ]; then
-            gh api --method PATCH "repos/$GH_REPO/issues/comments/$existing" -F body=@comment.md >/dev/null
-          else
-            gh api --method POST "repos/$GH_REPO/issues/$PR/comments" -F body=@comment.md >/dev/null
-          fi
+          gh api --method POST "repos/$GH_REPO/issues/$PR/comments" -F body=@comment.md >/dev/null
