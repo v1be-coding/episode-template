@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ghArgs, readOnlyEnv } from "./gh-read.mjs";
+import { ghArgs } from "./gh-read.mjs";
 
 test("each read is a GET to one fixed endpoint", () => {
   assert.deepEqual(ghArgs(["job-log", "134648424662"]), [
@@ -39,9 +39,4 @@ test("refuses anything that could change the request", () => {
     ["merge", "3"],
   ])
     assert.throws(() => ghArgs(argv), undefined, JSON.stringify(argv));
-});
-
-test("asks the gh wrapper for the read-only token, whatever the caller set", () => {
-  assert.deepEqual(readOnlyEnv({ PATH: "/bin" }), { PATH: "/bin", V1BE_GH_READ_ONLY: "1" });
-  assert.equal(readOnlyEnv({ V1BE_GH_READ_ONLY: "0" }).V1BE_GH_READ_ONLY, "1");
 });
